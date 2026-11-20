@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { ApiError, getCampaign, type Period } from '@/shared/api'
+import { ApiError, getCampaign, type CampaignDetail, type Period, type StreamDraft } from '@/shared/api'
 import { useRequest } from '@/shared/lib'
 import { Alert, Badge, Button, PageHeader, Select, Spinner } from '@/shared/ui'
+import { EditCampaignForm } from './EditCampaignForm'
 import { StatTiles } from './StatsCells'
 import { StreamCard } from './StreamCard'
 
@@ -39,7 +40,10 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-/** The campaign's flows with their offers, shares and stats; offers can be added and removed. */
+/**
+ * The campaign's flows with their offers, shares and stats. Offer edits are kept as a draft
+ * in the wrapper and reach Keitaro on "Push to KT".
+ */
 export function CampaignPage() {
   const id = Number(useParams().id)
   const [params, setParams] = useSearchParams()
@@ -50,7 +54,18 @@ export function CampaignPage() {
     getCampaign(id, period, signal),
   )
   const reload = () => setVersion((v) => v + 1)
+  const [editing, setEditing] = useState(false)
   const campaign = data?.id === id ? data : undefined
+  // Drafts returned by edits, until the next load brings them anyway
+  const [edited, setEdited] = useState<{ source?: CampaignDetail; drafts: Record<number, StreamDraft> }>({
+    drafts: {},
+  })
+  const drafts = edited.source === campaign ? edited.drafts : {}
+  const setDraft = (draft: StreamDraft) =>
+    setEdited((prev) => ({
+      source: campaign,
+      drafts: { ...(prev.source === campaign ? prev.drafts : {}), [draft.stream_id]: draft },
+    }))
 
   if (error && (!campaign || (error instanceof ApiError && error.status === 404))) {
     return (
@@ -101,23 +116,47 @@ export function CampaignPage() {
           </span>
         }
         actions={
-          <Select
-            label="Stats period"
-            value={period}
-            options={PERIODS}
-            onChange={(e) =>
-              setParams(e.target.value === 'all_time' ? {} : { period: e.target.value }, { replace: true })
-            }
-          />
+          <>
+            <Select
+              label="Stats period"
+              value={period}
+              options={PERIODS}
+              onChange={(e) =>
+                setParams(e.target.value === 'all_time' ? {} : { period: e.target.value }, { replace: true })
+              }
+            />
+            {!editing && (
+              <Button variant="secondary" onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+            )}
+          </>
         }
       />
 
       {error && <Alert className="mb-4">Could not refresh the campaign: {error.message}</Alert>}
 
       <div className="space-y-4">
+        {editing && (
+          <EditCampaignForm
+            campaign={campaign}
+            onSaved={() => {
+              setEditing(false)
+              reload()
+            }}
+            onCancel={() => setEditing(false)}
+          />
+        )}
         <StatTiles stats={campaign.stats} />
         {campaign.streams.map((s) => (
-          <StreamCard key={s.id} campaignId={campaign.id} stream={s} onChanged={reload} busy={loading} />
+          <StreamCard
+            key={s.id}
+            campaignId={campaign.id}
+            stream={s}
+            draft={drafts[s.id] ?? s.draft}
+            onDraft={setDraft}
+            busy={loading}
+          />
         ))}
         {!campaign.streams.length && (
           <p className="text-sm text-slate-500 dark:text-slate-400">The campaign has no flows.</p>

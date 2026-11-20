@@ -87,6 +87,9 @@ class KeitaroClient:
     def create_campaign(self, payload: Json) -> Json:
         return self._request("POST", "/campaigns", json=payload)
 
+    def update_campaign(self, campaign_id: int, payload: Json) -> Json:
+        return self._request("PUT", f"/campaigns/{campaign_id}", json=payload)
+
     def delete_campaign(self, campaign_id: int) -> None:
         """Moves the campaign to the archive."""
         self._request("DELETE", f"/campaigns/{campaign_id}")

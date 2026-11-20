@@ -10,10 +10,14 @@ class FakeKeitaro:
     def __init__(self) -> None:
         self.domains = [
             {"id": 1813, "name": "kylovoa.com", "is_ssl": True, "state": "active"},
+            {"id": 1814, "name": "plain.example", "is_ssl": False, "state": "active"},
             {"id": 1, "name": "old.example", "is_ssl": True, "state": "deleted"},
         ]
         self.groups = [{"id": 10332, "name": "FORTESTS", "type": "campaigns"}]
-        self.sources = [{"id": 836, "name": "FORTESTS", "state": "active"}]
+        self.sources = [
+            {"id": 836, "name": "FORTESTS", "state": "active"},
+            {"id": 837, "name": "OLD", "state": "deleted"},
+        ]
         self.offers = {
             18813: {
                 "id": 18813,
@@ -22,10 +26,17 @@ class FakeKeitaro:
                 "group": "GAK JO Flexacil PE",
                 "country": ["Перу"],
             },
-            3749: {"id": 3749, "name": "[3749] Miaflow [BEAUTY-RO-BE_0009]", "state": "active"},
+            3749: {
+                "id": 3749,
+                "name": "[3749] Miaflow [BEAUTY-RO-BE_0009]",
+                "state": "active",
+                "affiliate_network": "network-7",
+            },
             3717: {"id": 3717, "name": "[3717] Miaflow [BEAUTY-RO-BE_0008]", "state": "active"},
             9: {"id": 9, "name": "archived", "state": "deleted"},
         }
+        # Offers in groups closed to the API key: missing from the list, 403 by id
+        self.hidden_offers = {10184}
         self.campaigns: dict[int, dict[str, Any]] = {}
         self.streams: dict[int, dict[str, Any]] = {}
         self.report_rows: list[dict[str, Any]] = []
@@ -63,6 +74,8 @@ class FakeKeitaro:
 
     def get_offer(self, offer_id: int):
         self._call("get_offer", offer_id)
+        if offer_id in self.hidden_offers:
+            raise KeitaroError("You have no permission to access this page - Offers", 403)
         if offer_id not in self.offers:
             raise KeitaroError("Not found", 404)
         return copy.deepcopy(self.offers[offer_id])
@@ -82,6 +95,14 @@ class FakeKeitaro:
             "domain": "https://kylovoa.com/",
         }
         self.campaigns[campaign["id"]] = campaign
+        return copy.deepcopy(campaign)
+
+    def update_campaign(self, campaign_id: int, payload):
+        self._call("update_campaign", payload)
+        campaign = self.campaigns[campaign_id]
+        campaign.update(payload)
+        if "group_id" in payload:
+            campaign["group_id"] = int(payload["group_id"])
         return copy.deepcopy(campaign)
 
     def delete_campaign(self, campaign_id: int):
@@ -120,6 +141,9 @@ class FakeKeitaro:
         stream = self.streams[stream_id]
         if "offers" in payload:
             stream["offers"] = [{**o, "stream_id": stream_id} for o in payload["offers"]]
+        for key in ("name", "filters"):
+            if key in payload:
+                stream[key] = payload[key]
         return copy.deepcopy(stream)
 
     def build_report(self, payload):

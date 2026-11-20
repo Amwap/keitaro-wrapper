@@ -1,56 +1,51 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { offerSearch } from '@/entities/offer'
-import { addStreamOffer, type Stream } from '@/shared/api'
-import { Alert, Button, Combobox } from '@/shared/ui'
+import { Button, SearchSelect } from '@/shared/ui'
 
 type AddOfferFormProps = {
-  campaignId: number
-  stream: Stream
-  /** Called after the offer is added, to reload the campaign. */
-  onAdded: () => Promise<void> | void
+  streamName: string
+  /** Offers already in the flow. */
+  exclude: number[]
+  disabled: boolean
+  /** Adds the offer to the draft; resolves to false when it failed. */
+  onAdd: (offerId: number) => Promise<boolean>
 }
 
-/** Picks an offer that is not in the flow yet; shares are then split evenly by the server. */
-export function AddOfferForm({ campaignId, stream, onAdded }: AddOfferFormProps) {
-  const [offer, setOffer] = useState<string[]>([])
+// Offers listed when the select opens; typing narrows them down
+const LIST_SIZE = 10
+
+/** Picks an offer from the whole Keitaro base; the free shares are then split evenly. */
+export function AddOfferForm({ streamName, exclude, disabled, onAdd }: AddOfferFormProps) {
+  const [offer, setOffer] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const ids = stream.offers.map((o) => o.offer_id).join(',')
-  const search = useMemo(() => offerSearch(ids ? ids.split(',').map(Number) : []), [ids])
+  const ids = exclude.join(',')
+  const search = useMemo(() => offerSearch(ids ? ids.split(',').map(Number) : [], LIST_SIZE), [ids])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!offer.length) return
+    if (offer === null) return
     setPending(true)
-    setError(null)
-    try {
-      await addStreamOffer(campaignId, stream.id, Number(offer[0]))
-      setOffer([])
-      await onAdded()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setPending(false)
-    }
+    if (await onAdd(Number(offer))) setOffer(null)
+    setPending(false)
   }
 
   return (
-    <form onSubmit={submit} className="space-y-2">
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Combobox
-          key={ids}
-          label={`Add an offer to ${stream.name}`}
-          value={offer}
-          onChange={setOffer}
-          search={search}
-          placeholder="Add an offer: search by id or name"
-          className="flex-1"
-        />
-        <Button type="submit" loading={pending} disabled={!offer.length} className="py-2">
-          Add offer
-        </Button>
-      </div>
-      {error && <Alert>{error}</Alert>}
+    <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
+      <SearchSelect
+        key={ids}
+        label={`Add an offer to ${streamName}`}
+        value={offer}
+        onChange={setOffer}
+        search={search}
+        limit={LIST_SIZE}
+        placeholder="Select an offer to add"
+        searchPlaceholder="Id, name, group, country or network"
+        disabled={disabled}
+        className="flex-1"
+      />
+      <Button type="submit" loading={pending} disabled={disabled || offer === null} className="py-2">
+        Add offer
+      </Button>
     </form>
   )
 }

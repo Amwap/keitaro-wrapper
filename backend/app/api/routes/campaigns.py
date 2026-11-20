@@ -7,10 +7,13 @@ from app.schemas.campaigns import (
     CampaignCreate,
     CampaignDetail,
     CampaignSummary,
+    CampaignUpdate,
     FormOptions,
     OfferAdd,
     OfferOption,
+    OfferUpdate,
     Period,
+    StreamDraft,
 )
 from app.services import campaigns
 
@@ -60,10 +63,18 @@ def get_campaign(
     return campaigns.get_campaign(db, client, campaign_id, period)
 
 
-@router.post(
-    "/campaigns/{campaign_id}/streams/{stream_id}/offers",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
+@router.patch("/campaigns/{campaign_id}")
+def update_campaign(
+    campaign_id: int, data: CampaignUpdate, _user: CurrentUser, db: DbSession, client: Keitaro
+) -> CampaignSummary:
+    """Changes the name, geo, domain, group or traffic source; the alias stays the same."""
+    return campaigns.update_campaign(db, client, campaign_id, data)
+
+
+FLOW = "/campaigns/{campaign_id}/streams/{stream_id}"
+
+
+@router.post(f"{FLOW}/offers")
 def add_offer(
     campaign_id: int,
     stream_id: int,
@@ -71,15 +82,28 @@ def add_offer(
     _user: CurrentUser,
     db: DbSession,
     client: Keitaro,
-) -> None:
-    """Adds an offer to the flow and splits shares evenly."""
-    campaigns.add_offer(db, client, campaign_id, stream_id, data.offer_id)
+) -> StreamDraft:
+    """Adds an offer to the draft (or restores a removed one); free shares are split evenly."""
+    return campaigns.add_offer(db, client, campaign_id, stream_id, data.offer_id)
 
 
-@router.delete(
-    "/campaigns/{campaign_id}/streams/{stream_id}/offers/{offer_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
+@router.patch(f"{FLOW}/offers/{{offer_id}}")
+def update_offer(
+    campaign_id: int,
+    stream_id: int,
+    offer_id: int,
+    data: OfferUpdate,
+    _user: CurrentUser,
+    db: DbSession,
+    client: Keitaro,
+) -> StreamDraft:
+    """Sets a manual share (pins the offer) or pins / unpins it; free shares are recalculated."""
+    return campaigns.update_offer(
+        db, client, campaign_id, stream_id, offer_id, share=data.share, pinned=data.pinned
+    )
+
+
+@router.delete(f"{FLOW}/offers/{{offer_id}}")
 def remove_offer(
     campaign_id: int,
     stream_id: int,
@@ -87,6 +111,35 @@ def remove_offer(
     _user: CurrentUser,
     db: DbSession,
     client: Keitaro,
-) -> None:
-    """Removes an offer from the flow and splits shares evenly among the rest."""
-    campaigns.remove_offer(db, client, campaign_id, stream_id, offer_id)
+) -> StreamDraft:
+    """Moves an offer to the removed list of the draft; free shares are split evenly."""
+    return campaigns.remove_offer(db, client, campaign_id, stream_id, offer_id)
+
+
+@router.post(f"{FLOW}/offers/{{offer_id}}/restore")
+def restore_offer(
+    campaign_id: int,
+    stream_id: int,
+    offer_id: int,
+    _user: CurrentUser,
+    db: DbSession,
+    client: Keitaro,
+) -> StreamDraft:
+    """Brings a removed offer back to the draft."""
+    return campaigns.restore_offer(db, client, campaign_id, stream_id, offer_id)
+
+
+@router.post(f"{FLOW}/push")
+def push_offers(
+    campaign_id: int, stream_id: int, _user: CurrentUser, db: DbSession, client: Keitaro
+) -> StreamDraft:
+    """Writes the draft offers and shares to the Keitaro flow."""
+    return campaigns.push_offers(db, client, campaign_id, stream_id)
+
+
+@router.post(f"{FLOW}/reset")
+def reset_offers(
+    campaign_id: int, stream_id: int, _user: CurrentUser, db: DbSession, client: Keitaro
+) -> StreamDraft:
+    """Drops the changes not pushed yet: the draft goes back to the Keitaro flow."""
+    return campaigns.reset_offers(db, client, campaign_id, stream_id)
