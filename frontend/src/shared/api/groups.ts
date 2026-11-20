@@ -23,3 +23,6 @@ export const createGroup = (name: string) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
   })
+
+/** Only the user's own groups without campaigns in them. */
+export const deleteGroup = (id: number) => apiRequest<GroupsInfo>(`/groups/${id}`, { method: 'DELETE' })

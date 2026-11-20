@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db.models import Campaign, FlowOffer, User
-from app.keitaro import KeitaroClient, KeitaroError
+from app.keitaro import KeitaroClient, KeitaroError, KeitaroPanelClient
 from app.schemas.campaigns import (
     CampaignCreate,
     CampaignDetail,
@@ -213,6 +213,23 @@ def create_group(client: KeitaroClient, user: User, data: GroupCreate) -> Groups
     if any(g.get("name") == name for g in client.list_groups("campaigns")):
         raise ServiceError(f"Group {name} already exists", 409)
     client.create_group({"name": name, "type": "campaigns"})
+    return groups_info(client, user)
+
+
+def delete_group(
+    client: KeitaroClient, panel: KeitaroPanelClient, user: User, group_id: int
+) -> GroupsInfo:
+    """Deletes a group of the user's own; groups with campaigns in them are kept.
+    Admin API v1 has no way to delete groups, so it goes through the admin panel."""
+    group = next((g for g in client.list_groups("campaigns") if g.get("id") == group_id), None)
+    if group is None:
+        raise ServiceError("Group not found", 404)
+    if not str(group.get("name") or "").startswith(name_prefix(user)):
+        raise ServiceError("Only your own groups can be deleted", 403)
+    used = sum(1 for c in client.list_campaigns() if _to_int(c.get("group_id")) == group_id)
+    if used:
+        raise ServiceError(f"The group has {used} campaign(s): move them out first", 409)
+    panel.delete_group(group_id)
     return groups_info(client, user)
 
 
@@ -1015,5 +1032,5 @@ def _add(target: Stats, other: Stats) -> None:
 def _to_int(value: Any) -> int | None:
     try:
         return int(value) if value not in (None, "") else None
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None

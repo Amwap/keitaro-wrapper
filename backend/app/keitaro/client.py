@@ -80,6 +80,7 @@ class KeitaroClient:
     def create_group(self, payload: Json) -> Json:
         return self._request("POST", "/groups", json=payload)
 
+
     def list_traffic_sources(self) -> list[Json]:
         return self._request("GET", "/traffic_sources")
 
@@ -148,3 +149,54 @@ def _error_details(res: httpx.Response) -> tuple[str, dict[str, str]]:
     if not fields:
         return fallback, {}
     return "; ".join(f"{k}: {v}" for k, v in fields.items()), fields
+
+
+class KeitaroPanelClient:
+    """Internal API of the Keitaro admin panel (`/{admin path}/?object=...`), signed in with the
+    panel login and password. Covers what Admin API v1 lacks: deleting groups."""
+
+    def __init__(
+        self,
+        admin_url: str,
+        login: str,
+        password: str,
+        timeout: float = 20,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        self._login, self._password = login, password
+        self._signed_in = False
+        self._http = httpx.Client(
+            base_url=admin_url.rstrip("/"),
+            headers={"Accept": "application/json", "User-Agent": USER_AGENT},
+            timeout=timeout,
+            transport=transport,
+        )
+
+    def close(self) -> None:
+        self._http.close()
+
+    def _call(self, method: str, payload: Json) -> Any:
+        try:
+            res = self._http.post("/", params={"object": method}, json=payload)
+        except httpx.HTTPError as e:
+            raise KeitaroError(f"Keitaro admin panel is unreachable: {e}") from e
+        if res.status_code >= 400:
+            message, fields = _error_details(res)
+            raise KeitaroError(message, res.status_code, fields)
+        try:
+            return res.json() if res.content else None
+        except ValueError as e:
+            raise KeitaroError("Keitaro admin panel returned a non-JSON response", res.status_code) from e
+
+    def _sign_in(self) -> None:
+        if self._signed_in:
+            return
+        body = self._call("auth.login", {"login": self._login, "password": self._password})
+        if not (isinstance(body, dict) and body.get("success")):
+            message = body.get("message") if isinstance(body, dict) else None
+            raise KeitaroError(f"Keitaro admin panel sign-in failed: {message or body}")
+        self._signed_in = True
+
+    def delete_group(self, group_id: int) -> None:
+        self._sign_in()
+        self._call("groups.delete", {"id": group_id})

@@ -6,6 +6,10 @@ services:
     environment:
       DB_PATH: /app/data/app.db
       CORS_ORIGINS: '["http://localhost:8080"]'
+      # Admin panel sign-in from the root .env: Admin API v1 can't delete groups
+      KEITARO_ADMIN_URL: ${KEITARO_URL:-}
+      KEITARO_LOGIN: ${KEITARO_LOGIN:-}
+      KEITARO_PASSWORD: ${KEITARO_PASSWORD:-}
       # Bind mounts from a Windows/macOS host don't deliver inotify events reliably
       WATCHFILES_FORCE_POLLING: "true"
     volumes:

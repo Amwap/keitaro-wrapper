@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.core.security import TokenError, decode_token
 from app.db import User, get_db
-from app.keitaro import KeitaroClient
+from app.keitaro import KeitaroClient, KeitaroPanelClient
 
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -50,3 +50,24 @@ def get_keitaro() -> Iterator[KeitaroClient]:
 
 
 Keitaro = Annotated[KeitaroClient, Depends(get_keitaro)]
+
+
+def get_keitaro_panel() -> Iterator[KeitaroPanelClient]:
+    settings = get_settings()
+    password = settings.keitaro_password.get_secret_value()
+    if not settings.keitaro_admin_url or not settings.keitaro_login or not password:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Keitaro admin panel is not configured: set KEITARO_ADMIN_URL, KEITARO_LOGIN "
+            "and KEITARO_PASSWORD",
+        )
+    client = KeitaroPanelClient(
+        settings.keitaro_admin_url, settings.keitaro_login, password, settings.keitaro_timeout_seconds
+    )
+    try:
+        yield client
+    finally:
+        client.close()
+
+
+KeitaroPanel = Annotated[KeitaroPanelClient, Depends(get_keitaro_panel)]

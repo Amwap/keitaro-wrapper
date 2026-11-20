@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CreateGroupModal } from '@/features/create-group'
+import { DeleteGroupButton } from '@/features/delete-group'
 import { listGroups, type GroupsInfo } from '@/shared/api'
 import { useRequest } from '@/shared/lib'
 import { Alert, Badge, Button, Card, PageHeader, Spinner } from '@/shared/ui'
@@ -9,9 +10,9 @@ const td = 'px-4 py-3 text-sm text-slate-700 dark:text-slate-300'
 
 export function GroupsPage() {
   const request = useRequest('groups', listGroups)
-  const [created, setCreated] = useState<GroupsInfo | null>(null)
+  const [updated, setUpdated] = useState<GroupsInfo | null>(null)
   const [creating, setCreating] = useState(false)
-  const data = created ?? request.data
+  const data = updated ?? request.data
 
   return (
     <>
@@ -31,7 +32,7 @@ export function GroupsPage() {
           onClose={() => setCreating(false)}
           prefix={data.prefix}
           onCreated={(_group, info) => {
-            setCreated(info)
+            setUpdated(info)
             setCreating(false)
           }}
         />
@@ -55,6 +56,9 @@ export function GroupsPage() {
                 <tr>
                   <th className={th}>ID</th>
                   <th className={th}>Name</th>
+                  <th className={th}>
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -66,6 +70,9 @@ export function GroupsPage() {
                         {g.name}
                         {g.own ? <Badge tone="indigo">Own</Badge> : <Badge>Default</Badge>}
                       </span>
+                    </td>
+                    <td className={`${td} text-right`}>
+                      {g.own && <DeleteGroupButton group={g} onDeleted={setUpdated} />}
                     </td>
                   </tr>
                 ))}

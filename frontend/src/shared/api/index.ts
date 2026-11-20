@@ -30,6 +30,6 @@ export {
   type StreamDraft,
   type SyncStatus,
 } from './campaigns'
-export { createGroup, listGroups, type GroupOption, type GroupsInfo } from './groups'
+export { createGroup, deleteGroup, listGroups, type GroupOption, type GroupsInfo } from './groups'
 export { getHealth, type Health } from './health'
 export { onSessionExpired, refreshAccessToken } from './token'

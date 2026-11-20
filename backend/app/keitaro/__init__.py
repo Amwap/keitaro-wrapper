@@ -1,3 +1,3 @@
-from app.keitaro.client import KeitaroClient, KeitaroError
+from app.keitaro.client import KeitaroClient, KeitaroError, KeitaroPanelClient
 
-__all__ = ["KeitaroClient", "KeitaroError"]
+__all__ = ["KeitaroClient", "KeitaroError", "KeitaroPanelClient"]

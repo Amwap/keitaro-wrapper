@@ -28,8 +28,9 @@ export function Modal({ open, onClose, title, description, children }: ModalProp
   return (
     <dialog
       ref={ref}
-      // Fires on Escape too; skip it when the parent closed the dialog itself
-      onClose={() => openRef.current && onClose()}
+      // Fires on Escape too; skip it when the parent closed the dialog itself.
+      // React bubbles `close` from a nested dialog, so react to this dialog's own only
+      onClose={(e) => e.target === e.currentTarget && openRef.current && onClose()}
       onClick={(e) => e.target === e.currentTarget && onClose()}
       className="m-auto w-[calc(100%-2rem)] max-w-2xl rounded-xl bg-white p-0 text-slate-900 shadow-xl ring-1 ring-slate-200 backdrop:bg-slate-900/50 dark:bg-slate-900 dark:text-white dark:ring-slate-800"
     >

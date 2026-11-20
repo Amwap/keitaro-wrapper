@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     keitaro_api_key: SecretStr = SecretStr("")
     keitaro_timeout_seconds: float = 20
     keitaro_timezone: str = "Europe/Moscow"
+    # Admin panel (`tlgk.host/{admin path}`) and its user: Admin API v1 can't delete groups
+    keitaro_admin_url: str = ""
+    keitaro_login: str = ""
+    keitaro_password: SecretStr = SecretStr("")
     # Defaults for the campaign creation form (ids in Keitaro)
     keitaro_default_domain_id: int | None = None
     keitaro_default_group_id: int | None = None
@@ -37,6 +41,13 @@ class Settings(BaseSettings):
     # Secret part of the tracker postback URL (`https://domain/{secret}/postback`); the Admin API
     # does not expose it. Without it the Tracking Script reports clicks but not conversions
     keitaro_postback_secret: str = ""
+
+    @field_validator("keitaro_admin_url")
+    @classmethod
+    def _normalize_keitaro_admin_url(cls, value: str) -> str:
+        """`tlgk.host/admin` -> `https://tlgk.host/admin`: the path is the admin panel's."""
+        value = value.strip().rstrip("/")
+        return value if not value or "://" in value else "https://" + value
 
     @field_validator("keitaro_url")
     @classmethod
