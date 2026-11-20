@@ -7,6 +7,12 @@ from pathlib import Path
 _tmp = Path(tempfile.mkdtemp())
 os.environ["DB_PATH"] = str(_tmp / "test.db")
 os.environ["JWT_SECRET"] = "test-secret-" + "x" * 32
+# Tests never talk to a real tracker: env vars win over values from .env
+os.environ["KEITARO_URL"] = ""
+os.environ["KEITARO_API_KEY"] = ""
+os.environ["KEITARO_DEFAULT_DOMAIN_ID"] = "1813"
+os.environ["KEITARO_DEFAULT_GROUP_ID"] = "10332"
+os.environ["KEITARO_DEFAULT_TRAFFIC_SOURCE_ID"] = "836"
 
 
 import pytest  # noqa: E402
