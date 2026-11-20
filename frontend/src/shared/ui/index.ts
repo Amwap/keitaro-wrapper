@@ -1,5 +1,7 @@
+export { Alert } from './Alert'
 export { Badge } from './Badge'
 export { Button, Spinner } from './Button'
+export { buttonClass } from './buttonClass'
 export { Card, PageHeader } from './Card'
 export { Combobox, type ComboOption, type ComboSearch } from './Combobox'
 export { DataTable, type Column } from './data-table/DataTable'

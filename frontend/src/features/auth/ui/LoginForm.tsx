@@ -1,7 +1,7 @@
 import { useActionState } from 'react'
 import { signIn } from '@/entities/session'
 import { ApiError } from '@/shared/api'
-import { Button, Input } from '@/shared/ui'
+import { Alert, Button, Input } from '@/shared/ui'
 
 type FormState = { username: string; error: string | null }
 
@@ -43,14 +43,7 @@ export function LoginForm() {
         aria-invalid={state.error ? true : undefined}
       />
 
-      {state.error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300"
-        >
-          {state.error}
-        </p>
-      )}
+      {state.error && <Alert>{state.error}</Alert>}
 
       <Button type="submit" loading={pending} className="w-full">
         {pending ? 'Signing in…' : 'Sign in'}

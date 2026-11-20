@@ -3,11 +3,15 @@ import { NavLink } from 'react-router'
 import { useSession } from '@/entities/session'
 import { LogoutButton } from '@/features/auth'
 import { ThemeSwitcher } from '@/features/theme-switcher'
-import { CloseIcon, CollapseIcon, ExpandIcon, MenuIcon, OverviewIcon } from './icons'
+import { CampaignsIcon, CloseIcon, CollapseIcon, ExpandIcon, MenuIcon, PlusIcon } from './icons'
 
-type NavItem = { to: string; label: string; icon: ComponentType<{ className?: string }> }
+type NavItem = { to: string; label: string; icon: ComponentType<{ className?: string }>; end?: boolean }
 
-const NAV: NavItem[] = [{ to: '/', label: 'Overview', icon: OverviewIcon }]
+const NAV: NavItem[] = [
+  { to: '/campaigns/new', label: 'New campaign', icon: PlusIcon },
+  // `/campaigns/new` has its own item, so the list stays inactive there
+  { to: '/campaigns', label: 'Campaigns', icon: CampaignsIcon, end: true },
+]
 
 function Brand({ compact = false }: { compact?: boolean }) {
   return (
@@ -56,11 +60,11 @@ function SidebarContent({ onNavigate, collapsed = false, onToggle }: SidebarCont
 
       <nav aria-label="Main" className="flex-1">
         <ul className="space-y-1">
-          {NAV.map(({ to, label, icon: Icon }) => (
+          {NAV.map(({ to, label, icon: Icon, end }) => (
             <li key={to}>
               <NavLink
                 to={to}
-                end={to === '/'}
+                end={end}
                 onClick={onNavigate}
                 title={collapsed ? label : undefined}
                 className={({ isActive }) =>

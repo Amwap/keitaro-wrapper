@@ -7,6 +7,7 @@ export {
   formatRate,
   parseApiDate,
 } from './format'
+export { countryName, parseGeo } from './geo'
 export {
   setThemePreference,
   useColorScheme,

@@ -22,6 +22,16 @@ async function errorMessage(res: Response) {
   try {
     const { detail } = JSON.parse(text) as { detail?: unknown }
     if (typeof detail === 'string') return detail
+    // FastAPI validation errors: [{loc, msg, type}, ...]
+    if (Array.isArray(detail)) {
+      return detail
+        .map((d: { loc?: unknown[]; msg?: string }) => {
+          const field = d.loc?.filter((p) => p !== 'body').join('.')
+          const msg = (d.msg ?? '').replace(/^Value error, /, '')
+          return field ? `${field}: ${msg}` : msg
+        })
+        .join('; ')
+    }
   } catch {
     // not JSON
   }

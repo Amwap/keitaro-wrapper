@@ -17,8 +17,12 @@ function Icon({ className = 'size-5', d }: IconProps & { d: string }) {
   )
 }
 
-export const OverviewIcon = (p: IconProps) => (
+export const CampaignsIcon = (p: IconProps) => (
   <Icon {...p} d="M3.75 13.5h4.5v6.75h-4.5zM9.75 3.75h4.5v16.5h-4.5zM15.75 9h4.5v11.25h-4.5z" />
+)
+
+export const PlusIcon = (p: IconProps) => (
+  <Icon {...p} d="M12 7.5v9M7.5 12h9M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
 )
 
 export const MenuIcon = (p: IconProps) => <Icon {...p} d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
