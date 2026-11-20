@@ -54,7 +54,9 @@ docker compose exec backend python -m scripts.users list
 - `POST /api/campaigns` `{name, geo, offer_id, domain_id?, group_id?, traffic_source_id?}` → 201.
   `geo` — список ISO-кодов или строка `"MX,AU"`. Создаёт кампанию (ротация по позиции, CPC 0) и
   два потока: `geo → KEITARO_GEO_REDIRECT_URL` (фильтр `country` accept) и «все остальные → оффер 100%».
-  Если поток не создался, кампания уходит в архив Keitaro, ответ 502
+  Если поток не создался, кампания уходит в архив Keitaro, ответ 502.
+  В Keitaro имя получает префикс автора: пользователь `admin`, имя `promo` → `test_admin_promo`;
+  обёртка показывает имя без префикса
 - `GET /api/campaigns` → кампании, созданные через обёртку (таблица `campaigns`)
 - `GET /api/campaigns/{id}?period=all_time` → кампания, потоки, офферы с долями и статистика
   «клики / уники / боты» (`clicks` / `stream_unique_clicks` / `bots` из `/report/build`) по кампании,

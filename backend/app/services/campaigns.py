@@ -60,6 +60,16 @@ def make_alias(name: str) -> str:
     return f"{slug}-{suffix}" if slug else f"c-{suffix}"
 
 
+def name_prefix(user: User) -> str:
+    """Keitaro names are prefixed with the creator: `test_admin_` for user `admin`."""
+    return f"test_{user.username}_"
+
+
+def display_name(name: str, user: User | None) -> str:
+    """Name as shown in the wrapper: the Keitaro name without the creator's prefix."""
+    return name.removeprefix(name_prefix(user)) if user else name
+
+
 # Reference data
 
 
@@ -120,7 +130,7 @@ def create_campaign(
 
     campaign = client.create_campaign(
         {
-            "name": data.name,
+            "name": name_prefix(user) + data.name,
             "alias": make_alias(data.name),
             "type": "position",
             "state": "active",
@@ -163,7 +173,7 @@ def create_campaign(
 
     row = Campaign(
         keitaro_id=campaign["id"],
-        name=campaign.get("name", data.name),
+        name=display_name(campaign.get("name", data.name), user),
         alias=campaign["alias"],
         url=_campaign_url(campaign, domain),
         created_by_id=user.id,
@@ -200,7 +210,7 @@ def get_campaign(
 
     return CampaignDetail(
         id=campaign["id"],
-        name=campaign.get("name", row.name),
+        name=display_name(campaign.get("name", row.name), _creator(db, row)),
         alias=campaign.get("alias", row.alias),
         url=row.url,
         state=campaign.get("state", "active"),
@@ -386,6 +396,10 @@ def _offer_option(offer: dict[str, Any]) -> OfferOption:
         group=offer.get("group"),
         countries=offer.get("country") or [],
     )
+
+
+def _creator(db: Session, row: Campaign) -> User | None:
+    return db.get(User, row.created_by_id) if row.created_by_id else None
 
 
 def _summary(row: Campaign) -> CampaignSummary:

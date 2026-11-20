@@ -69,7 +69,8 @@ def test_create_campaign(client, auth_headers, keitaro: FakeKeitaro) -> None:
     body = create(client, auth_headers)
 
     campaign = keitaro.campaigns[body["id"]]
-    assert campaign["name"] == "test_ilya_campaign"
+    assert campaign["name"] == "test_fixture-reader_test_ilya_campaign"
+    assert body["name"] == "test_ilya_campaign"
     assert campaign["domain_id"] == 1813
     assert campaign["group_id"] == 10332
     assert campaign["traffic_source_id"] == 836
@@ -88,7 +89,9 @@ def test_create_campaign(client, auth_headers, keitaro: FakeKeitaro) -> None:
     assert [(o["offer_id"], o["share"]) for o in offers["offers"]] == [(18813, 100)]
 
     listed = client.get("/api/campaigns", headers=auth_headers).json()
-    assert [c["id"] for c in listed] == [body["id"]]
+    assert [(c["id"], c["name"]) for c in listed] == [(body["id"], "test_ilya_campaign")]
+    detail = client.get(f"/api/campaigns/{body['id']}", headers=auth_headers).json()
+    assert detail["name"] == "test_ilya_campaign"
 
 
 def test_create_with_explicit_ids_validates_them(client, auth_headers, keitaro) -> None:
