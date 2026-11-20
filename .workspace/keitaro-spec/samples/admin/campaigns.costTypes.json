@@ -1,0 +1,26 @@
+[
+  {
+    "value": "CPC",
+    "name": "CPC (Оплата за клик)"
+  },
+  {
+    "value": "CPUC",
+    "name": "CPuC (Оплата за уникальный клик)"
+  },
+  {
+    "value": "CPM",
+    "name": "CPM (Оплата за тысячу кликов)"
+  },
+  {
+    "value": "CPA",
+    "name": "CPA (Оплата за действие)"
+  },
+  {
+    "value": "CPS",
+    "name": "CPS (Оплата за продажу)"
+  },
+  {
+    "value": "RevShare",
+    "name": "RevShare"
+  }
+]

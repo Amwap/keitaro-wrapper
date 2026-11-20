@@ -1,0 +1,110 @@
+{
+  "rows": [
+    {
+      "campaign_id": 211913,
+      "campaign": "test_kotovsky_campaign1",
+      "clicks": 13,
+      "stream_unique_clicks": 1,
+      "bots": 0
+    },
+    {
+      "campaign_id": 213156,
+      "campaign": "test_tyutikov_campaign1",
+      "clicks": 5,
+      "stream_unique_clicks": 0,
+      "bots": 5
+    },
+    {
+      "campaign_id": 212056,
+      "campaign": "test_vorobev_campaign1",
+      "clicks": 5,
+      "stream_unique_clicks": 0,
+      "bots": 2
+    },
+    {
+      "campaign_id": 213292,
+      "campaign": "test_vorobev_live_check",
+      "clicks": 4,
+      "stream_unique_clicks": 0,
+      "bots": 0
+    },
+    {
+      "campaign_id": 209551,
+      "campaign": "test_walrus_campaign1",
+      "clicks": 4,
+      "stream_unique_clicks": 1,
+      "bots": 3
+    },
+    {
+      "campaign_id": 212852,
+      "campaign": "test_asoyan_campaign1",
+      "clicks": 3,
+      "stream_unique_clicks": 1,
+      "bots": 0
+    },
+    {
+      "campaign_id": 213891,
+      "campaign": "Adrobot QA 2026-11-18",
+      "clicks": 2,
+      "stream_unique_clicks": 0,
+      "bots": 2
+    },
+    {
+      "campaign_id": 213173,
+      "campaign": "test_tyutikov_audit2",
+      "clicks": 2,
+      "stream_unique_clicks": 0,
+      "bots": 2
+    },
+    {
+      "campaign_id": 211903,
+      "campaign": "test_starikov_camp_1",
+      "clicks": 2,
+      "stream_unique_clicks": 0,
+      "bots": 0
+    },
+    {
+      "campaign_id": 211693,
+      "campaign": "test_pokotilo_campaign1",
+      "clicks": 2,
+      "stream_unique_clicks": 2,
+      "bots": 0
+    },
+    {
+      "campaign_id": 209990,
+      "campaign": "test_malkov_smoke1",
+      "clicks": 2,
+      "stream_unique_clicks": 0,
+      "bots": 2
+    },
+    {
+      "campaign_id": 212435,
+      "campaign": "test_Rudenko",
+      "clicks": 1,
+      "stream_unique_clicks": 1,
+      "bots": 0
+    },
+    {
+      "campaign_id": 212434,
+      "campaign": "test_test_test1",
+      "clicks": 1,
+      "stream_unique_clicks": 1,
+      "bots": 0
+    },
+    {
+      "campaign_id": 212301,
+      "campaign": "test_kotomin_campaign4",
+      "clicks": 1,
+      "stream_unique_clicks": 0,
+      "bots": 1
+    },
+    {
+      "campaign_id": 212183,
+      "campaign": "adrobot_final_20261116233025",
+      "clicks": 1,
+      "stream_unique_clicks": 1,
+      "bots": 0
+    }
+  ],
+  "total": 21
+}

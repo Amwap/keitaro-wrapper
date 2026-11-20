@@ -1,0 +1,67 @@
+[
+  {
+    "id": 1324281,
+    "type": "regular",
+    "name": "AU → Google",
+    "campaign_id": 214892,
+    "position": 1,
+    "action_options": null,
+    "comments": null,
+    "state": "active",
+    "created_at": "2026-11-19 00:29:31",
+    "action_type": "http",
+    "action_payload": "https://www.google.com/",
+    "schema": "redirect",
+    "collect_clicks": true,
+    "filter_or": false,
+    "weight": 0,
+    "offer_selection": "before_click",
+    "filters": [
+      {
+        "id": 2985724,
+        "stream_id": 1324281,
+        "name": "country",
+        "mode": "accept",
+        "payload": [
+          "AU"
+        ],
+        "oid": 2985724
+      }
+    ],
+    "triggers": [],
+    "landings": [],
+    "offers": []
+  },
+  {
+    "id": 1324282,
+    "type": "regular",
+    "name": "Offers",
+    "campaign_id": 214892,
+    "position": 2,
+    "action_options": null,
+    "comments": null,
+    "state": "active",
+    "created_at": "2026-11-19 00:29:33",
+    "action_type": "http",
+    "action_payload": "",
+    "schema": "landings",
+    "collect_clicks": true,
+    "filter_or": false,
+    "weight": 0,
+    "offer_selection": "before_click",
+    "filters": [],
+    "triggers": [],
+    "landings": [],
+    "offers": [
+      {
+        "id": 2078049,
+        "stream_id": 1324282,
+        "offer_id": 18813,
+        "state": "active",
+        "share": 100,
+        "created_at": "2026-11-19 00:29:33",
+        "updated_at": "2026-11-19 00:29:33"
+      }
+    ]
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "value": "landings",
+    "name": "Лендинги и офферы",
+    "description": "streams.schemas.landings_desc"
+  },
+  {
+    "value": "redirect",
+    "name": "Прямой URL",
+    "description": "streams.schemas.redirect_desc"
+  },
+  {
+    "value": "action",
+    "name": "Действие",
+    "description": "streams.schemas.action_desc"
+  }
+]

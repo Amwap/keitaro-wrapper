@@ -1,0 +1,67 @@
+[
+  {
+    "id": 1324291,
+    "type": "regular",
+    "name": "JP -> Google",
+    "campaign_id": 214895,
+    "position": 1,
+    "action_options": null,
+    "comments": null,
+    "state": "active",
+    "created_at": "2026-11-19 00:30:43",
+    "action_type": "http",
+    "action_payload": "https://google.com",
+    "schema": "redirect",
+    "collect_clicks": true,
+    "filter_or": false,
+    "weight": 0,
+    "offer_selection": "before_click",
+    "filters": [
+      {
+        "id": 2985733,
+        "stream_id": 1324291,
+        "name": "country",
+        "mode": "accept",
+        "payload": [
+          "JP"
+        ],
+        "oid": 2985733
+      }
+    ],
+    "triggers": [],
+    "landings": [],
+    "offers": []
+  },
+  {
+    "id": 1324292,
+    "type": "regular",
+    "name": "Offers",
+    "campaign_id": 214895,
+    "position": 2,
+    "action_options": null,
+    "comments": null,
+    "state": "active",
+    "created_at": "2026-11-19 00:30:44",
+    "action_type": "http",
+    "action_payload": null,
+    "schema": "landings",
+    "collect_clicks": true,
+    "filter_or": false,
+    "weight": 0,
+    "offer_selection": "before_click",
+    "filters": [],
+    "triggers": [],
+    "landings": [],
+    "offers": [
+      {
+        "id": 2078060,
+        "stream_id": 1324292,
+        "offer_id": 18813,
+        "state": "active",
+        "share": 100,
+        "created_at": "2026-11-19 00:30:44",
+        "updated_at": "2026-11-19 00:30:44"
+      }
+    ]
+  }
+]

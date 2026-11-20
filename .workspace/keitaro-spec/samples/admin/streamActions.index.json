@@ -1,0 +1,128 @@
+[
+  {
+    "key": "http",
+    "name": "HttpRedirect",
+    "field": "url",
+    "type": "redirect",
+    "description": "Рекомендуется. Классический редирект (302)"
+  },
+  {
+    "key": "meta",
+    "name": "Meta",
+    "field": "url",
+    "type": "redirect",
+    "description": "Совершает редирект, используя тег meta"
+  },
+  {
+    "key": "js",
+    "name": "Js",
+    "field": "url",
+    "type": "redirect",
+    "description": "Использует JS код для совершения редиректа"
+  },
+  {
+    "key": "blank_referrer",
+    "name": "BlankReferrer",
+    "field": "url",
+    "type": "redirect",
+    "description": "Редирект без передачи Referer"
+  },
+  {
+    "key": "curl",
+    "name": "Curl",
+    "field": "url",
+    "type": "redirect",
+    "description": "Показывает содержимое страницы без видимого совершения редиректа"
+  },
+  {
+    "key": "double_meta",
+    "name": "DoubleMeta",
+    "field": "url",
+    "type": "redirect",
+    "description": "Редирект в 2 шага. Помогает скрыть источник от конечного сайта"
+  },
+  {
+    "key": "formsubmit",
+    "name": "FormSubmit",
+    "field": "url",
+    "type": "redirect",
+    "description": "Редирект с передачей POST-данных"
+  },
+  {
+    "key": "iframe",
+    "name": "Iframe",
+    "field": "url",
+    "type": "redirect",
+    "description": "Показывает страницу во фрейме (iframe)"
+  },
+  {
+    "key": "campaign",
+    "name": "ToCampaign",
+    "field": "campaigns",
+    "type": "other",
+    "description": "Отправляет в другую кампанию без редиректа (клик дублируется в отчетах каждой кампании)"
+  },
+  {
+    "key": "status404",
+    "name": "Status404",
+    "field": "nothing",
+    "type": "other",
+    "description": "Показывает белую страницу с ошибкой 404"
+  },
+  {
+    "key": "show_text",
+    "name": "ShowText",
+    "field": "text",
+    "type": "other",
+    "description": "Показывает текст"
+  },
+  {
+    "key": "show_html",
+    "name": "ShowHtml",
+    "field": "text",
+    "type": "other",
+    "description": "Показывает HTML страницу"
+  },
+  {
+    "key": "do_nothing",
+    "name": "DoNothing",
+    "field": "nothing",
+    "type": "other",
+    "description": "Оставляет пользователя там где он сейчас находится"
+  },
+  {
+    "key": "remote",
+    "name": "Remote",
+    "field": "url",
+    "type": "redirect",
+    "description": "Сначала загрузит содержимое страницы, затем это содержимое использует для выполнения редиректа"
+  },
+  {
+    "key": "frame",
+    "name": "Frame",
+    "field": "url",
+    "type": "redirect",
+    "description": "Показывает страницу во фрейме (frameset)"
+  },
+  {
+    "key": "js_for_script",
+    "name": "JsForScript",
+    "field": "url",
+    "type": "redirect",
+    "description": "Использовать \"JS-редирект\""
+  },
+  {
+    "key": "js_for_iframe",
+    "name": "JsForIframe",
+    "field": "url",
+    "type": "redirect",
+    "description": "Использовать \"JS-редирект\""
+  },
+  {
+    "key": "local_file",
+    "name": "LocalFile",
+    "field": "upload",
+    "type": "hidden",
+    "description": ""
+  }
+]
