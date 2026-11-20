@@ -21,9 +21,9 @@ router = APIRouter(tags=["campaigns"])
 
 
 @router.get("/campaigns/form-options")
-def form_options(_user: CurrentUser, client: Keitaro) -> FormOptions:
-    """Domains, campaign groups and traffic sources for the creation form."""
-    return campaigns.form_options(client)
+def form_options(user: CurrentUser, client: Keitaro) -> FormOptions:
+    """Domains, campaign groups open to the user and traffic sources for the creation form."""
+    return campaigns.form_options(client, user)
 
 
 @router.get("/offers")
@@ -33,7 +33,7 @@ def search_offers(
     q: str = "",
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> list[OfferOption]:
-    """Offer autocomplete: by id prefix or name substring."""
+    """Offer autocomplete: every word is a part of the id, name, group, country or network."""
     return campaigns.search_offers(client, q, limit)
 
 
@@ -65,10 +65,16 @@ def get_campaign(
 
 @router.patch("/campaigns/{campaign_id}")
 def update_campaign(
-    campaign_id: int, data: CampaignUpdate, _user: CurrentUser, db: DbSession, client: Keitaro
+    campaign_id: int, data: CampaignUpdate, user: CurrentUser, db: DbSession, client: Keitaro
 ) -> CampaignSummary:
     """Changes the name, geo, domain, group or traffic source; the alias stays the same."""
-    return campaigns.update_campaign(db, client, campaign_id, data)
+    return campaigns.update_campaign(db, client, user, campaign_id, data)
+
+
+@router.delete("/campaigns/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_campaign(campaign_id: int, _user: CurrentUser, db: DbSession, client: Keitaro) -> None:
+    """Moves the campaign to the Keitaro archive and removes it from the wrapper."""
+    campaigns.delete_campaign(db, client, campaign_id)
 
 
 FLOW = "/campaigns/{campaign_id}/streams/{stream_id}"

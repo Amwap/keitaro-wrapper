@@ -40,6 +40,15 @@ def test_error_message_and_status() -> None:
     assert exc.value.message == "Invalid API key"
 
 
+def test_field_errors() -> None:
+    body = {"name": ["Name already taken"], "alias": "Alias is invalid"}
+    client = make_client(lambda _r: httpx.Response(422, json=body))
+    with pytest.raises(KeitaroError) as exc:
+        client.create_campaign({})
+    assert exc.value.fields == {"name": "Name already taken", "alias": "Alias is invalid"}
+    assert exc.value.message == "name: Name already taken; alias: Alias is invalid"
+
+
 def test_non_json_error() -> None:
     client = make_client(lambda _r: httpx.Response(403, text="<html>cloudflare</html>"))
     with pytest.raises(KeitaroError) as exc:

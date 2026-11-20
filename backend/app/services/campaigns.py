@@ -26,6 +26,9 @@ from app.schemas.campaigns import (
     DraftOffer,
     FormDefaults,
     FormOptions,
+    GroupCreate,
+    GroupOption,
+    GroupsInfo,
     OfferOption,
     OfferStats,
     Option,
@@ -55,10 +58,14 @@ HIDDEN = "hidden"
 class ServiceError(Exception):
     """Business error that maps to an HTTP status in the API layer."""
 
-    def __init__(self, message: str, status: int = 400) -> None:
+    def __init__(
+        self, message: str, status: int = 400, fields: dict[str, str] | None = None
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.status = status
+        # Messages by request field, for the form to highlight
+        self.fields = fields or {}
 
 
 def split_shares(count: int, total: float = 100) -> list[float]:
@@ -131,37 +138,97 @@ def display_name(name: str, user: User | None) -> str:
     return name.removeprefix(name_prefix(user)) if user else name
 
 
+def keitaro_link(path: str) -> str | None:
+    """Page of the Keitaro admin (hash routes), None when the tracker URL is not set."""
+    base = get_settings().keitaro_url
+    return f"{base}/admin/#!{path}" if base else None
+
+
 # Reference data
 
 
-def form_options(client: KeitaroClient) -> FormOptions:
-    settings = get_settings()
+def form_options(client: KeitaroClient, user: User) -> FormOptions:
+    domains = [d for d in client.list_domains() if _is_active(d)]
+    groups = allowed_groups(client, user)
+    sources = [s for s in client.list_traffic_sources() if _is_active(s)]
     return FormOptions(
-        domains=[_domain_option(d) for d in client.list_domains() if _is_active(d)],
-        groups=[Option(id=g["id"], name=g["name"]) for g in client.list_groups("campaigns")],
-        traffic_sources=[
-            Option(id=s["id"], name=s["name"])
-            for s in client.list_traffic_sources()
-            if _is_active(s)
-        ],
-        defaults=FormDefaults(
-            domain_id=settings.keitaro_default_domain_id,
-            group_id=settings.keitaro_default_group_id,
-            traffic_source_id=settings.keitaro_default_traffic_source_id,
-        ),
+        domains=[_domain_option(d) for d in domains],
+        groups=[Option(id=g["id"], name=display_name(g["name"], user)) for g in groups],
+        group_prefix=name_prefix(user),
+        traffic_sources=[Option(id=s["id"], name=s["name"]) for s in sources],
+        defaults=_defaults(domains, groups, sources),
     )
 
 
-def search_offers(client: KeitaroClient, query: str = "", limit: int = 20) -> list[OfferOption]:
-    """Search over the whole offer base: every word of the query has to match the id, name,
-    group, country or affiliate network. Exact id matches go first, then id prefixes.
+def _defaults(
+    domains: list[dict[str, Any]], groups: list[dict[str, Any]], sources: list[dict[str, Any]]
+) -> FormDefaults:
+    """Ids from the settings; without them FORTESTS by name and the first active domain."""
+    settings = get_settings()
+    return FormDefaults(
+        domain_id=settings.keitaro_default_domain_id or (domains[0]["id"] if domains else None),
+        group_id=settings.keitaro_default_group_id
+        or _id_by_name(groups, settings.keitaro_default_group_name),
+        traffic_source_id=settings.keitaro_default_traffic_source_id
+        or _id_by_name(sources, settings.keitaro_default_traffic_source_name),
+    )
 
-    A bare id missing from the list is looked up directly: offers in groups closed to the API key
-    can still be put into flows, they come back as `hidden`.
+
+def _id_by_name(items: list[dict[str, Any]], name: str) -> int | None:
+    return next((i["id"] for i in items if i.get("name") == name), None)
+
+
+def allowed_groups(client: KeitaroClient, user: User) -> list[dict[str, Any]]:
+    """Campaign groups the user may pick: the default one (FORTESTS) and the user's own ones,
+    named `test_{username}_...` in Keitaro."""
+    settings = get_settings()
+    prefix = name_prefix(user)
+    return [
+        g
+        for g in client.list_groups("campaigns")
+        if g.get("id") == settings.keitaro_default_group_id
+        or g.get("name") == settings.keitaro_default_group_name
+        or str(g.get("name") or "").startswith(prefix)
+    ]
+
+
+def groups_info(client: KeitaroClient, user: User) -> GroupsInfo:
+    prefix = name_prefix(user)
+    return GroupsInfo(
+        groups=[
+            GroupOption(
+                id=g["id"],
+                name=display_name(g["name"], user),
+                own=g["name"].startswith(prefix),
+            )
+            for g in allowed_groups(client, user)
+        ],
+        prefix=prefix,
+    )
+
+
+def create_group(client: KeitaroClient, user: User, data: GroupCreate) -> GroupsInfo:
+    """Creates a campaign group named `test_{username}_{name}` in Keitaro."""
+    name = name_prefix(user) + data.name
+    if any(g.get("name") == name for g in client.list_groups("campaigns")):
+        raise ServiceError(f"Group {name} already exists", 409)
+    client.create_group({"name": name, "type": "campaigns"})
+    return groups_info(client, user)
+
+
+def search_offers(client: KeitaroClient, query: str = "", limit: int = 20) -> list[OfferOption]:
+    """Search over the whole offer base: every word of the query has to be a part of the id,
+    name, group, country or affiliate network. Exact id matches go first, then id prefixes.
+
+    Offers in groups closed to the API key can still be put into flows, they come back as
+    `hidden`: those that ever got clicks are searched by the id and name from the report,
+    the rest are found by their exact id only.
     """
     words = query.strip().lower().split()
+    visible = [o for o in client.list_offers() if _is_active(o)]
+    known = {o["id"] for o in visible}
     found: list[tuple[int, dict[str, Any]]] = []
-    for offer in client.list_offers():
+    for offer in visible + [o for o in _reported_offers(client) if o["id"] not in known]:
         if not _is_active(offer):
             continue
         offer_id = str(offer["id"])
@@ -187,6 +254,27 @@ def search_offers(client: KeitaroClient, query: str = "", limit: int = 20) -> li
     return [_offer_option(o) for _, o in found[:limit]]
 
 
+def _reported_offers(client: KeitaroClient) -> list[dict[str, Any]]:
+    """Offers that got clicks, with names: the report shows them even from groups closed to the
+    API key. A report the key may not build just gives nothing."""
+    try:
+        report = client.build_report(
+            {
+                "range": {"interval": "all_time", "timezone": get_settings().keitaro_timezone},
+                "grouping": ["offer_id", "offer"],
+                "metrics": ["clicks"],
+            }
+        )
+    except KeitaroError:
+        return []
+    offers = []
+    for row in report.get("rows") or []:
+        offer_id = _to_int(row.get("offer_id"))
+        if offer_id:  # 0: clicks that went to no offer
+            offers.append({"id": offer_id, "name": row.get("offer"), HIDDEN: True})
+    return offers
+
+
 # Creator
 
 
@@ -194,18 +282,30 @@ def create_campaign(
     db: Session, client: KeitaroClient, user: User, data: CampaignCreate
 ) -> CampaignSummary:
     settings = get_settings()
-    domain_id = data.domain_id or settings.keitaro_default_domain_id
-    group_id = data.group_id or settings.keitaro_default_group_id
-    source_id = data.traffic_source_id or settings.keitaro_default_traffic_source_id
+    domains = [d for d in client.list_domains() if _is_active(d)]
+    groups = allowed_groups(client, user)
+    sources = [s for s in client.list_traffic_sources() if _is_active(s)]
+    defaults = _defaults(domains, groups, sources)
+    domain_id = data.domain_id or defaults.domain_id
+    group_id = data.group_id or defaults.group_id
+    source_id = data.traffic_source_id or defaults.traffic_source_id
     if domain_id is None or group_id is None or source_id is None:
         raise ServiceError("domain_id, group_id and traffic_source_id are required", 422)
 
-    domains = [d for d in client.list_domains() if _is_active(d)]
-    sources = [s for s in client.list_traffic_sources() if _is_active(s)]
     domain = _find(domains, domain_id, "Domain")
-    _find(client.list_groups("campaigns"), group_id, "Group")
+    _find(groups, group_id, "Group")
     _find(sources, source_id, "Traffic source")
-    _get_offer(client, data.offer_id)
+    try:
+        offers = [_get_offer(client, offer_id) for offer_id in data.offer_ids]
+    except ServiceError as e:
+        e.fields = {"offer_ids": e.message}
+        raise
+    for offer_id, offer in zip(data.offer_ids, offers, strict=True):
+        if not _is_active(offer):
+            message = f"Offer {offer_id} is deleted in Keitaro"
+            raise ServiceError(message, 422, fields={"offer_ids": message})
+    shares = split_shares(len(offers))
+    _check_name_free(client, name_prefix(user) + data.name)
 
     campaign = client.create_campaign(
         {
@@ -234,7 +334,7 @@ def create_campaign(
                 "filters": [{"name": "country", "mode": "accept", "payload": data.geo}],
             }
         )
-        client.create_stream(
+        offers_stream = client.create_stream(
             {
                 "campaign_id": campaign["id"],
                 "name": "Offers",
@@ -243,7 +343,10 @@ def create_campaign(
                 "state": "active",
                 "schema": OFFERS_SCHEMA,
                 "action_type": "http",
-                "offers": [{"offer_id": data.offer_id, "share": 100, "state": "active"}],
+                "offers": [
+                    {"offer_id": offer_id, "share": keitaro_share(share), "state": "active"}
+                    for offer_id, share in zip(data.offer_ids, shares, strict=True)
+                ],
             }
         )
     except KeitaroError:
@@ -258,13 +361,46 @@ def create_campaign(
         created_by_id=user.id,
     )
     db.add(row)
+    db.flush()
+    # The draft starts in sync with Keitaro and keeps the exact shares (100/3, not 33)
+    entries = zip(data.offer_ids, offers, shares, strict=True)
+    for position, (offer_id, offer, share) in enumerate(entries, start=1):
+        db.add(
+            FlowOffer(
+                campaign_id=row.id,
+                stream_id=offers_stream["id"],
+                offer_id=offer_id,
+                name=offer.get("name"),
+                position=position,
+                share=share,
+                pinned=False,
+                state=ACTIVE,
+                keitaro_share=keitaro_share(share),
+            )
+        )
     db.commit()
     db.refresh(row)  # created_at is filled by the database
     return _summary(row)
 
 
+def delete_campaign(db: Session, client: KeitaroClient, campaign_id: int) -> None:
+    """Moves the campaign to the Keitaro archive and forgets it here (with its offer drafts).
+
+    The Admin API has no hard delete of one campaign: `clean_archive` empties the archive
+    of the whole tracker, which is shared.
+    """
+    row = _tracked(db, campaign_id)
+    try:
+        client.delete_campaign(campaign_id)
+    except KeitaroError as e:
+        if e.status != 404:  # already gone in Keitaro
+            raise
+    db.delete(row)
+    db.commit()
+
+
 def update_campaign(
-    db: Session, client: KeitaroClient, campaign_id: int, data: CampaignUpdate
+    db: Session, client: KeitaroClient, user: User, campaign_id: int, data: CampaignUpdate
 ) -> CampaignSummary:
     """Changes what the creation form set, except the offer (the offers flow has its editor).
 
@@ -276,12 +412,13 @@ def update_campaign(
     domain = None
     if data.name is not None:
         payload["name"] = (name_prefix(creator) if creator else "") + data.name
+        _check_name_free(client, payload["name"], campaign_id)
     if data.domain_id is not None:
         domains = [d for d in client.list_domains() if _is_active(d)]
         domain = _find(domains, data.domain_id, "Domain")
         payload["domain_id"] = data.domain_id
     if data.group_id is not None:
-        _find(client.list_groups("campaigns"), data.group_id, "Group")
+        _find(allowed_groups(client, user), data.group_id, "Group")
         payload["group_id"] = str(data.group_id)  # string in the Admin API request schema
     if data.traffic_source_id is not None:
         sources = [s for s in client.list_traffic_sources() if _is_active(s)]
@@ -337,9 +474,13 @@ def get_campaign(
 
     return CampaignDetail(
         id=campaign["id"],
+        keitaro_link=keitaro_link(f"/campaign/{campaign['id']}"),
         name=display_name(campaign.get("name", row.name), _creator(db, row)),
         alias=campaign.get("alias", row.alias),
         url=row.url,
+        tracking_url=tracking_url(row.url, campaign.get("parameters")),
+        token=campaign.get("token") or None,
+        postback_url=_postback_url(row),
         state=campaign.get("state", "active"),
         domain_id=campaign.get("domain_id"),
         group_id=campaign.get("group_id"),
@@ -764,11 +905,27 @@ def _lookup_offer(client: KeitaroClient, offer_id: int) -> dict[str, Any] | None
         raise
 
 
+def _check_name_free(client: KeitaroClient, name: str, campaign_id: int | None = None) -> None:
+    """Campaign names are unique in Keitaro; its own 422 would come without a clear reason."""
+    for campaign in client.list_campaigns():
+        if campaign.get("name") == name and campaign.get("id") != campaign_id:
+            raise ServiceError(
+                f"Campaign {name} already exists in Keitaro",
+                409,
+                fields={"name": "A campaign with this name already exists"},
+            )
+
+
+# Request field of a reference by its label in error messages
+_REF_FIELDS = {"Domain": "domain_id", "Group": "group_id", "Traffic source": "traffic_source_id"}
+
+
 def _find(items: list[dict[str, Any]], item_id: int, label: str) -> dict[str, Any]:
     for item in items:
         if item.get("id") == item_id:
             return item
-    raise ServiceError(f"{label} {item_id} not found", 422)
+    message = f"{label} {item_id} not found"
+    raise ServiceError(message, 422, fields={_REF_FIELDS[label]: message})
 
 
 def _rollback(client: KeitaroClient, campaign_id: int) -> None:
@@ -781,6 +938,29 @@ def _rollback(client: KeitaroClient, campaign_id: int) -> None:
 def _campaign_url(campaign: dict[str, Any], domain: dict[str, Any]) -> str:
     base = campaign.get("domain") or _domain_url(domain)
     return f"{base.rstrip('/')}/{campaign['alias']}"
+
+
+def tracking_url(url: str, parameters: Any) -> str:
+    """The URL to put into the traffic source: `?sub_id_1={zoneid}&...` for each parameter
+    with a placeholder. The placeholders are macros of the source, so they stay unencoded;
+    `alias` is only a label for reports."""
+    if not isinstance(parameters, dict):  # Keitaro sends `[]` when there are none
+        return url
+    query = [
+        f"{p.get('name') or key}={p['placeholder']}"
+        for key, p in parameters.items()
+        if isinstance(p, dict) and p.get("placeholder")
+    ]
+    return f"{url}?{'&'.join(query)}" if query else url
+
+
+def _postback_url(row: Campaign) -> str | None:
+    """`https://domain/{secret}/postback`, as the Keitaro admin builds it for the Tracking Script."""
+    secret = get_settings().keitaro_postback_secret.strip("/")
+    if not secret:
+        return None
+    root = row.url.removesuffix(f"/{row.alias}")
+    return f"{root}/{secret}/postback"
 
 
 def _domain_url(domain: dict[str, Any]) -> str:
@@ -813,7 +993,12 @@ def _creator(db: Session, row: Campaign) -> User | None:
 
 def _summary(row: Campaign) -> CampaignSummary:
     return CampaignSummary(
-        id=row.keitaro_id, name=row.name, alias=row.alias, url=row.url, created_at=row.created_at
+        id=row.keitaro_id,
+        name=row.name,
+        alias=row.alias,
+        url=row.url,
+        created_at=row.created_at,
+        keitaro_link=keitaro_link(f"/campaign/{row.keitaro_id}"),
     )
 
 

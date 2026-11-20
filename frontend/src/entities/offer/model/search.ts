@@ -11,17 +11,21 @@ const hintOf = (o: OfferOption) =>
         .filter(Boolean)
         .join(' · ') || undefined
 
+/** A hidden offer's name is known only from the click report, otherwise it is just `#id`. */
+const nameOf = (o: OfferOption) => (o.hidden && o.name === `#${o.id}` ? null : o.name)
+
 const toOption = (o: OfferOption): ComboOption => ({
   value: String(o.id),
-  label: offerLabel(o.id, o.hidden ? null : o.name),
-  title: o.hidden ? undefined : o.name,
+  label: offerLabel(o.id, nameOf(o)),
+  title: nameOf(o) ?? undefined,
   hint: hintOf(o),
 })
 
 /**
  * Combobox search over the whole Keitaro offer base, without the ids in `exclude`.
- * Every word has to match the id, name, group, country or affiliate network; an offer hidden from
- * the API key is found by its exact id only.
+ * Every word has to be a part of the id, name, group, country or affiliate network. An offer
+ * hidden from the API key is searched by id and name if it ever got clicks, otherwise by its
+ * exact id only.
  */
 export const offerSearch =
   (exclude: number[] = [], limit = 20): ComboSearch =>

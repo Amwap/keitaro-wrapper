@@ -13,7 +13,10 @@ class FakeKeitaro:
             {"id": 1814, "name": "plain.example", "is_ssl": False, "state": "active"},
             {"id": 1, "name": "old.example", "is_ssl": True, "state": "deleted"},
         ]
-        self.groups = [{"id": 10332, "name": "FORTESTS", "type": "campaigns"}]
+        self.groups = [
+            {"id": 10332, "name": "FORTESTS", "type": "campaigns"},
+            {"id": 10296, "name": "test_malkov_group", "type": "campaigns"},
+        ]
         self.sources = [
             {"id": 836, "name": "FORTESTS", "state": "active"},
             {"id": 837, "name": "OLD", "state": "deleted"},
@@ -64,6 +67,12 @@ class FakeKeitaro:
         self._call("list_groups", group_type)
         return copy.deepcopy(self.groups)
 
+    def create_group(self, payload):
+        self._call("create_group", payload)
+        group = {"id": self._id(), "name": payload["name"], "type": payload["type"]}
+        self.groups.append(group)
+        return copy.deepcopy(group)
+
     def list_traffic_sources(self):
         self._call("list_traffic_sources")
         return copy.deepcopy(self.sources)
@@ -79,6 +88,11 @@ class FakeKeitaro:
         if offer_id not in self.offers:
             raise KeitaroError("Not found", 404)
         return copy.deepcopy(self.offers[offer_id])
+
+    def list_campaigns(self):
+        """Without archived campaigns: Keitaro lists those at `/campaigns/deleted`."""
+        self._call("list_campaigns")
+        return copy.deepcopy([c for c in self.campaigns.values() if c.get("state") != "deleted"])
 
     def get_campaign(self, campaign_id: int):
         self._call("get_campaign", campaign_id)
@@ -107,6 +121,8 @@ class FakeKeitaro:
 
     def delete_campaign(self, campaign_id: int):
         self._call("delete_campaign", campaign_id)
+        if campaign_id not in self.campaigns:
+            raise KeitaroError("Not found", 404)
         self.campaigns[campaign_id]["state"] = "deleted"
 
     def list_streams(self, campaign_id: int):

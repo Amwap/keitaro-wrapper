@@ -40,7 +40,9 @@ docker compose exec backend python -m scripts.users list
 | `KEITARO_API_KEY` | API-ключ (Профиль → API ключи). Без него ручки Keitaro отвечают 503 |
 | `KEITARO_TIMEZONE` | Таймзона отчётов, по умолчанию `Europe/Moscow` |
 | `KEITARO_DEFAULT_DOMAIN_ID`, `_GROUP_ID`, `_TRAFFIC_SOURCE_ID` | Значения формы создания по умолчанию |
+| `KEITARO_DEFAULT_GROUP_NAME`, `_TRAFFIC_SOURCE_NAME` | Если id не задан — группа и источник ищутся по имени (`FORTESTS`), домен — первый активный |
 | `KEITARO_GEO_REDIRECT_URL` | Куда уводит гео-поток, по умолчанию `https://google.com` |
+| `KEITARO_POSTBACK_SECRET` | Секретная часть postback URL трекера (`https://domain/{secret}/postback`). Admin API её не отдаёт; без неё Tracking Script считает клики, но не конверсии |
 
 Перед трекером Cloudflare, который банит дефолтные User-Agent HTTP-библиотек, поэтому клиент
 шлёт браузерный.
@@ -49,15 +51,33 @@ docker compose exec backend python -m scripts.users list
 
 Все ручки требуют `Authorization: Bearer`. `{id}` — id кампании в Keitaro.
 
-- `GET /api/campaigns/form-options` → домены, группы кампаний, источники и значения по умолчанию
+Ошибки: `{detail}`; ошибки конкретных полей формы — ещё и `fields: {<поле запроса>: сообщение}`
+(`name`, `geo`, `offer_ids`, `domain_id`, `group_id`, `traffic_source_id`). Имя кампании уникально в Keitaro:
+перед созданием и переименованием оно проверяется по `GET /campaigns` → 409 с `fields.name`. Ошибки валидации
+Keitaro (тело `{поле: [сообщения]}`) отдаются как 422 с `fields` (ошибки `alias` — на `name`).
+
+- `GET /api/campaigns/form-options` → домены, группы кампаний, источники и значения по умолчанию.
+  Группы — только `KEITARO_DEFAULT_GROUP_ID` и свои группы пользователя (имя в Keitaro начинается
+  с `test_{username}_`); другой `group_id` при создании и правке — 422
+- Имена своих групп отдаются без префикса `test_{username}_` (в Keitaro хранятся с ним), как и имена кампаний.
+  `keitaro_link` — страница в админке Keitaro (`{KEITARO_URL}/admin/#!/campaign/{id}`); у групп ссылки нет —
+  отдельной страницы группы в админке Keitaro нет
+- `DELETE /api/campaigns/{id}` → 204: кампания уходит в архив Keitaro (`DELETE /campaigns/{id}`; 404 там — уже нет)
+  и удаляется из обёртки вместе с черновиками офферов. Жёсткого удаления одной кампании в Admin API нет,
+  а `clean_archive` чистит архив всего общего трекера — не используется
+- `GET /api/groups` → `{groups: [{id, name, own}], prefix}`; `POST /api/groups` `{name}` → 201, создаёт
+  в Keitaro группу `test_{username}_{name}` (`POST /groups {name, type: "campaigns"}`), 409 если такая есть
 - `GET /api/offers?q=&limit=20` → поиск по всей базе офферов Keitaro (без архивных): каждое слово
   запроса ищется в id, имени, группе, стране и партнёрке; сначала точное совпадение id, затем префикс id
   Оффер из группы, закрытой ключу (`GET /offers/{id}` → 403), находится только по точному id и
   приходит с `hidden: true` и именем `#id`: его можно поставить в поток и указать при создании кампании,
   при синке он не считается удалённым (`offer_deleted` — только для 404 и архивных)
-- `POST /api/campaigns` `{name, geo, offer_id, domain_id?, group_id?, traffic_source_id?}` → 201.
-  `geo` — список ISO-кодов или строка `"MX,AU"`. Создаёт кампанию (ротация по позиции, CPC 0) и
-  два потока: `geo → KEITARO_GEO_REDIRECT_URL` (фильтр `country` accept) и «все остальные → оффер 100%».
+- `POST /api/campaigns` `{name, geo, offer_ids, domain_id?, group_id?, traffic_source_id?}` → 201.
+  `geo` — список ISO-кодов или строка `"MX,AU"`; `offer_ids` — непустой список (дубли убираются),
+  неизвестный оффер — 422, архивный — 422. Создаёт кампанию (ротация по позиции, CPC 0) и
+  два потока: `geo → KEITARO_GEO_REDIRECT_URL` (фильтр `country` accept) и «все остальные → офферы»
+  с долями поровну (в Keitaro — округление вниз: 3 оффера → 33/33/33). Черновик офферов потока
+  (`flow_offers`) заводится сразу, синхронизированным, с точными долями (100/3).
   Если поток не создался, кампания уходит в архив Keitaro, ответ 502.
   В Keitaro имя получает префикс автора: пользователь `admin`, имя `promo` → `test_admin_promo`;
   обёртка показывает имя без префикса
@@ -65,6 +85,8 @@ docker compose exec backend python -m scripts.users list
 - `GET /api/campaigns/{id}?period=all_time` → кампания, потоки, черновик офферов (`draft`) и статистика
   «клики / уники / боты» (`clicks` / `stream_unique_clicks` / `bots` из `/report/build`) по кампании,
   потоку и офферу. `period` — интервалы Keitaro: `today`, `yesterday`, `7_days_ago`, `1_month_ago`, ...
+  Трекинговые данные для копирования: `tracking_url` — URL кампании с её `parameters`, у которых задан
+  плейсхолдер (`?{name}={placeholder}`, макросы не кодируются, как в Keitaro), и `token` для Click API.
 
 #### Редактор офферов: черновик и push
 

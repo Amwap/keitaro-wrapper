@@ -3,14 +3,14 @@ import { NavLink } from 'react-router'
 import { useSession } from '@/entities/session'
 import { LogoutButton } from '@/features/auth'
 import { ThemeSwitcher } from '@/features/theme-switcher'
-import { CampaignsIcon, CloseIcon, CollapseIcon, ExpandIcon, MenuIcon, PlusIcon } from './icons'
+import { CampaignsIcon, CloseIcon, CollapseIcon, ExpandIcon, GroupsIcon, MenuIcon } from './icons'
 
 type NavItem = { to: string; label: string; icon: ComponentType<{ className?: string }>; end?: boolean }
 
 const NAV: NavItem[] = [
-  { to: '/campaigns/new', label: 'New campaign', icon: PlusIcon },
-  // `/campaigns/new` has its own item, so the list stays inactive there
-  { to: '/campaigns', label: 'Campaigns', icon: CampaignsIcon, end: true },
+  // Also active on `/campaigns/new`: the creation modal opens over the list
+  { to: '/campaigns', label: 'Campaigns', icon: CampaignsIcon },
+  { to: '/groups', label: 'Groups', icon: GroupsIcon },
 ]
 
 function Brand({ compact = false }: { compact?: boolean }) {

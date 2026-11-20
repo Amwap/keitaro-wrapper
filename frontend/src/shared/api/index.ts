@@ -1,8 +1,9 @@
-export { ApiError, apiGet, apiRequest } from './client'
+export { ApiError, apiGet, apiRequest, fieldErrors } from './client'
 export { getMe, login, logout, type User } from './auth'
 export {
   addStreamOffer,
   createCampaign,
+  deleteCampaign,
   getCampaign,
   getFormOptions,
   listCampaigns,
@@ -29,5 +30,6 @@ export {
   type StreamDraft,
   type SyncStatus,
 } from './campaigns'
+export { createGroup, listGroups, type GroupOption, type GroupsInfo } from './groups'
 export { getHealth, type Health } from './health'
 export { onSessionExpired, refreshAccessToken } from './token'

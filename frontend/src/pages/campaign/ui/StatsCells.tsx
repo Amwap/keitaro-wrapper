@@ -15,21 +15,3 @@ export function StatsCells({ stats, className = '' }: { stats: Stats; className?
     </td>
   ))
 }
-
-export function StatTiles({ stats }: { stats: Stats }) {
-  return (
-    <dl className="grid grid-cols-3 gap-3">
-      {STAT_COLUMNS.map(({ key, label }) => (
-        <div
-          key={key}
-          className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-        >
-          <dt className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</dt>
-          <dd className="mt-1 text-xl font-semibold tabular-nums text-slate-900 dark:text-white">
-            {formatNumber(stats[key])}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  )
-}

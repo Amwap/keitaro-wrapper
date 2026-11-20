@@ -18,12 +18,18 @@ Json = dict[str, Any]
 
 
 class KeitaroError(Exception):
-    """Keitaro answered with an error or could not be reached (`status` is None then)."""
+    """Keitaro answered with an error or could not be reached (`status` is None then).
 
-    def __init__(self, message: str, status: int | None = None) -> None:
+    `fields` holds validation errors by Keitaro field name (`{"name": "..."}`).
+    """
+
+    def __init__(
+        self, message: str, status: int | None = None, fields: dict[str, str] | None = None
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.status = status
+        self.fields = fields or {}
 
 
 class KeitaroClient:
@@ -54,7 +60,8 @@ class KeitaroClient:
         except httpx.HTTPError as e:
             raise KeitaroError(f"Keitaro is unreachable: {e}") from e
         if res.status_code >= 400:
-            raise KeitaroError(_error_message(res), res.status_code)
+            message, fields = _error_details(res)
+            raise KeitaroError(message, res.status_code, fields)
         if not res.content:
             return None
         try:
@@ -70,6 +77,9 @@ class KeitaroClient:
     def list_groups(self, group_type: str = "campaigns") -> list[Json]:
         return self._request("GET", "/groups", params={"type": group_type})
 
+    def create_group(self, payload: Json) -> Json:
+        return self._request("POST", "/groups", json=payload)
+
     def list_traffic_sources(self) -> list[Json]:
         return self._request("GET", "/traffic_sources")
 
@@ -80,6 +90,9 @@ class KeitaroClient:
         return self._request("GET", f"/offers/{offer_id}")
 
     # Campaigns
+
+    def list_campaigns(self) -> list[Json]:
+        return self._request("GET", "/campaigns")
 
     def get_campaign(self, campaign_id: int) -> Json:
         return self._request("GET", f"/campaigns/{campaign_id}")
@@ -114,13 +127,24 @@ class KeitaroClient:
         return self._request("POST", "/report/build", json=payload)
 
 
-def _error_message(res: httpx.Response) -> str:
+def _error_details(res: httpx.Response) -> tuple[str, dict[str, str]]:
+    """Message and field errors. Keitaro answers `{"error": "..."}` or, on validation
+    (406/422), `{"name": ["..."], ...}`: messages by field."""
+    fallback = f"Keitaro error {res.status_code}"
     try:
         body = res.json()
     except ValueError:
-        return f"Keitaro error {res.status_code}"
-    if isinstance(body, dict):
-        for key in ("error", "message", "name"):
-            if isinstance(body.get(key), str) and body[key]:
-                return body[key]
-    return f"Keitaro error {res.status_code}"
+        return fallback, {}
+    if not isinstance(body, dict):
+        return fallback, {}
+    for key in ("error", "message"):
+        if isinstance(body.get(key), str) and body[key]:
+            return body[key], {}
+    fields: dict[str, str] = {}
+    for key, value in body.items():
+        messages = [value] if isinstance(value, str) else value
+        if isinstance(messages, list) and messages and all(isinstance(m, str) for m in messages):
+            fields[key] = "; ".join(messages)
+    if not fields:
+        return fallback, {}
+    return "; ".join(f"{k}: {v}" for k, v in fields.items()), fields

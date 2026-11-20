@@ -2,15 +2,17 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.api.deps import get_keitaro
-from app.db import Campaign, SessionLocal
+from app.config import get_settings
+from app.db import Campaign, FlowOffer, SessionLocal
+from app.keitaro import KeitaroError
 from app.main import app
-from app.services.campaigns import keitaro_share, make_alias, split_shares
+from app.services.campaigns import keitaro_link, keitaro_share, make_alias, split_shares
 from tests.fake_keitaro import FakeKeitaro
 
-NEW_CAMPAIGN = {"name": "test_ilya_campaign", "geo": "au, MX ,au", "offer_id": 18813}
+NEW_CAMPAIGN = {"name": "test_ilya_campaign", "geo": "au, MX ,au", "offer_ids": [18813]}
 
 
 @pytest.fixture(scope="module")
@@ -115,11 +117,56 @@ def test_create_rejects_bad_geo(client, auth_headers, keitaro, geo) -> None:
 
 def test_create_unknown_offer(client, auth_headers, keitaro) -> None:
     res = client.post(
-        "/api/campaigns", json={**NEW_CAMPAIGN, "offer_id": 404}, headers=auth_headers
+        "/api/campaigns", json={**NEW_CAMPAIGN, "offer_ids": [18813, 404]}, headers=auth_headers
     )
     assert res.status_code == 422
     assert res.json()["detail"] == "Offer 404 not found"
     assert not keitaro.campaigns
+
+
+def test_create_archived_offer(client, auth_headers, keitaro) -> None:
+    res = client.post(
+        "/api/campaigns", json={**NEW_CAMPAIGN, "offer_ids": [9]}, headers=auth_headers
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"] == "Offer 9 is deleted in Keitaro"
+    assert not keitaro.campaigns
+
+
+@pytest.mark.parametrize("offer_ids", [[], [0], "18813"])
+def test_create_rejects_bad_offers(client, auth_headers, keitaro, offer_ids) -> None:
+    res = client.post(
+        "/api/campaigns", json={**NEW_CAMPAIGN, "offer_ids": offer_ids}, headers=auth_headers
+    )
+    assert res.status_code == 422
+
+
+def test_create_with_several_offers(client, auth_headers, keitaro: FakeKeitaro) -> None:
+    """Keitaro gets whole percents, the wrapper's draft starts in sync with the exact shares."""
+    res = client.post(
+        "/api/campaigns",
+        json={**NEW_CAMPAIGN, "offer_ids": [18813, 3749, 10184, 3749]},
+        headers=auth_headers,
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    (offers,) = (
+        s for s in keitaro.streams.values() if s["campaign_id"] == body["id"] and s["position"] == 2
+    )
+    assert [(o["offer_id"], o["share"]) for o in offers["offers"]] == [
+        (18813, 33),
+        (3749, 33),
+        (10184, 33),
+    ]
+
+    detail = client.get(f"/api/campaigns/{body['id']}", headers=auth_headers).json()
+    draft = detail["streams"][1]["draft"]
+    assert [(o["offer_id"], round(o["share"], 2), o["sync"]) for o in draft["offers"]] == [
+        (18813, 33.33, "synced"),
+        (3749, 33.33, "synced"),
+        (10184, 33.33, "synced"),
+    ]
+    assert draft["dirty"] is False
 
 
 def test_create_rolls_back_when_flow_fails(client, auth_headers, keitaro: FakeKeitaro) -> None:
@@ -189,6 +236,7 @@ def test_update_only_sends_given_fields(client, auth_headers, keitaro: FakeKeita
     [
         ({"domain_id": 1}, "Domain 1 not found"),
         ({"group_id": 5}, "Group 5 not found"),
+        ({"group_id": 10296}, "Group 10296 not found"),  # someone else's group
         ({"traffic_source_id": 837}, "Traffic source 837 not found"),
     ],
 )
@@ -197,6 +245,7 @@ def test_update_validates_ids(client, auth_headers, keitaro, data, detail) -> No
     res = client.patch(f"/api/campaigns/{body['id']}", json=data, headers=auth_headers)
     assert res.status_code == 422
     assert res.json()["detail"] == detail
+    assert list(res.json()["fields"]) == list(data)  # the form highlights the field
     assert not [c for c in keitaro.calls if c[0] == "update_campaign"]
 
 
@@ -205,6 +254,58 @@ def test_update_rejects_bad_input(client, auth_headers, keitaro, data) -> None:
     body = create(client, auth_headers)
     res = client.patch(f"/api/campaigns/{body['id']}", json=data, headers=auth_headers)
     assert res.status_code == 422
+
+
+def test_duplicate_name(client, auth_headers, keitaro: FakeKeitaro) -> None:
+    """Names are unique in Keitaro: the form gets the field to highlight."""
+    first = create(client, auth_headers, name="dup")
+    keitaro.calls.clear()
+    res = client.post("/api/campaigns", json={**NEW_CAMPAIGN, "name": "dup"}, headers=auth_headers)
+    assert res.status_code == 409
+    assert res.json()["fields"] == {"name": "A campaign with this name already exists"}
+    assert "create_campaign" not in [name for name, _ in keitaro.calls]
+
+    other = create(client, auth_headers, name="other")
+    res = client.patch(f"/api/campaigns/{other['id']}", json={"name": "dup"}, headers=auth_headers)
+    assert res.status_code == 409 and res.json()["fields"]["name"]
+    # Keeping its own name is fine
+    res = client.patch(f"/api/campaigns/{first['id']}", json={"name": "dup"}, headers=auth_headers)
+    assert res.status_code == 200, res.text
+
+
+def test_keitaro_field_errors(client, auth_headers, keitaro: FakeKeitaro, monkeypatch) -> None:
+    """Keitaro validation errors come back as 422 with the fields; alias errors go to the name."""
+
+    def reject(_payload):
+        raise KeitaroError("alias: taken", 422, {"alias": "taken"})
+
+    monkeypatch.setattr(keitaro, "create_campaign", reject)
+    res = client.post("/api/campaigns", json=NEW_CAMPAIGN, headers=auth_headers)
+    assert res.status_code == 422
+    assert res.json() == {"detail": "Keitaro: alias: taken", "fields": {"name": "taken"}}
+
+
+def test_delete_campaign(client, auth_headers, keitaro: FakeKeitaro) -> None:
+    """Archived in Keitaro, gone from the wrapper together with its offer drafts."""
+    body = create(client, auth_headers)
+    with SessionLocal() as db:
+        row_id = db.scalar(select(Campaign.id).where(Campaign.keitaro_id == body["id"]))
+    res = client.delete(f"/api/campaigns/{body['id']}", headers=auth_headers)
+    assert res.status_code == 204
+    assert keitaro.campaigns[body["id"]]["state"] == "deleted"
+    assert body["id"] not in [
+        c["id"] for c in client.get("/api/campaigns", headers=auth_headers).json()
+    ]
+    with SessionLocal() as db:
+        assert not db.scalars(select(FlowOffer).where(FlowOffer.campaign_id == row_id)).all()
+    res = client.delete(f"/api/campaigns/{body['id']}", headers=auth_headers)
+    assert res.status_code == 404
+
+
+def test_delete_campaign_missing_in_keitaro(client, auth_headers, keitaro: FakeKeitaro) -> None:
+    body = create(client, auth_headers)
+    del keitaro.campaigns[body["id"]]
+    assert client.delete(f"/api/campaigns/{body['id']}", headers=auth_headers).status_code == 204
 
 
 def test_update_unknown_campaign(client, auth_headers, keitaro) -> None:
@@ -221,6 +322,51 @@ def test_form_options(client, auth_headers, keitaro) -> None:
     assert body["groups"] == [{"id": 10332, "name": "FORTESTS"}]
     assert body["traffic_sources"] == [{"id": 836, "name": "FORTESTS"}]
     assert body["defaults"] == {"domain_id": 1813, "group_id": 10332, "traffic_source_id": 836}
+
+
+def test_defaults_without_ids(client, auth_headers, keitaro, monkeypatch) -> None:
+    """Without default ids in the settings: FORTESTS by name and the first active domain."""
+    settings = get_settings()
+    for field in ("domain", "group", "traffic_source"):
+        monkeypatch.setattr(settings, f"keitaro_default_{field}_id", None)
+    keitaro.groups.insert(0, {"id": 1, "name": "test_malkov_x", "type": "campaigns"})
+    body = client.get("/api/campaigns/form-options", headers=auth_headers).json()
+    assert body["defaults"] == {"domain_id": 1813, "group_id": 10332, "traffic_source_id": 836}
+    assert [g["name"] for g in body["groups"]] == ["FORTESTS"]
+    campaign = create(client, auth_headers)
+    assert keitaro.campaigns[campaign["id"]]["group_id"] == 10332
+
+
+def test_keitaro_links(monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "keitaro_url", "https://tlgk.host")
+    assert keitaro_link("/campaign/7") == "https://tlgk.host/admin/#!/campaign/7"
+    monkeypatch.setattr(get_settings(), "keitaro_url", "")
+    assert keitaro_link("/campaign/7") is None
+
+
+def test_groups(client, auth_headers, keitaro: FakeKeitaro) -> None:
+    """FORTESTS and the user's own groups are open; new ones get the `test_{username}_` prefix."""
+    prefix = "test_fixture-reader_"
+    body = client.get("/api/groups", headers=auth_headers).json()
+    fortests = {"id": 10332, "name": "FORTESTS", "own": False}
+    assert body == {"groups": [fortests], "prefix": prefix}
+
+    res = client.post("/api/groups", json={"name": "  main "}, headers=auth_headers)
+    assert res.status_code == 201
+    assert ("create_group", {"name": f"{prefix}main", "type": "campaigns"}) in keitaro.calls
+    own = res.json()["groups"][-1]
+    assert own["name"] == "main" and own["own"]  # shown without the prefix
+
+    form = client.get("/api/campaigns/form-options", headers=auth_headers).json()
+    assert [g["name"] for g in form["groups"]] == ["FORTESTS", "main"]
+    assert form["group_prefix"] == prefix
+    campaign = create(client, auth_headers, group_id=own["id"])
+    assert keitaro.campaigns[campaign["id"]]["group_id"] == own["id"]
+
+    res = client.post("/api/groups", json={"name": "main"}, headers=auth_headers)
+    assert res.status_code == 409
+    res = client.post("/api/groups", json={"name": "  "}, headers=auth_headers)
+    assert res.status_code == 422
 
 
 def test_search_offers(client, auth_headers, keitaro) -> None:
@@ -244,9 +390,48 @@ def test_search_offers(client, auth_headers, keitaro) -> None:
     res = client.get("/api/offers", params={"q": "10184"}, headers=auth_headers)
     assert [(o["id"], o["name"], o["hidden"]) for o in res.json()] == [(10184, "#10184", True)]
     assert ids("404") == []
+    # Hidden offers that got clicks are searched by a part of the id or name from the report
+    keitaro.report_rows = [
+        {"offer_id": 0, "offer": None, "clicks": 9},
+        {"offer_id": 11134, "offer": "11134 LongerSX [PROSTATITIS-ES]", "clicks": 1},
+        {"offer_id": 18813, "offer": "18813 Flexacil", "clicks": 5},  # visible already
+    ]
+    res = client.get("/api/offers", params={"q": "longer"}, headers=auth_headers)
+    assert [(o["id"], o["name"], o["hidden"]) for o in res.json()] == [
+        (11134, "11134 LongerSX [PROSTATITIS-ES]", True)
+    ]
+    assert ids("1113") == [11134]
+    assert ids("flexacil") == [18813]
 
 
 # Editor
+
+
+def test_campaign_detail_tracking_data(client, auth_headers, keitaro: FakeKeitaro, monkeypatch) -> None:
+    body = create(client, auth_headers)
+    detail = client.get(f"/api/campaigns/{body['id']}", headers=auth_headers).json()
+    assert detail["postback_url"] is None  # no KEITARO_POSTBACK_SECRET
+
+    monkeypatch.setattr(get_settings(), "keitaro_postback_secret", "s3cret")
+    detail = client.get(f"/api/campaigns/{body['id']}", headers=auth_headers).json()
+    assert detail["postback_url"] == "https://kylovoa.com/s3cret/postback"
+
+    keitaro.campaigns[body["id"]].update(
+        token="abc123",
+        parameters={
+            "sub_id_1": {"name": "zone", "placeholder": "{zoneid}", "alias": "Zone"},
+            "keyword": {"name": "keyword", "placeholder": "{keyword}", "alias": ""},
+            "cost": {"name": "cost", "placeholder": "", "alias": ""},  # no placeholder: skipped
+        },
+    )
+
+    detail = client.get(f"/api/campaigns/{body['id']}", headers=auth_headers).json()
+    assert detail["token"] == "abc123"
+    assert detail["tracking_url"] == f"{body['url']}?zone={{zoneid}}&keyword={{keyword}}"
+
+    keitaro.campaigns[body["id"]]["parameters"] = []  # how Keitaro sends no parameters
+    detail = client.get(f"/api/campaigns/{body['id']}", headers=auth_headers).json()
+    assert detail["tracking_url"] == body["url"]
 
 
 def test_campaign_detail_with_stats(client, auth_headers, keitaro: FakeKeitaro) -> None:

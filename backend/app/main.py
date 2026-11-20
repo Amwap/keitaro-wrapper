@@ -40,13 +40,21 @@ def create_app() -> FastAPI:
 
 
 async def _service_error(_request: Request, exc: ServiceError) -> JSONResponse:
-    return JSONResponse({"detail": exc.message}, status_code=exc.status)
+    body: dict[str, object] = {"detail": exc.message}
+    if exc.fields:
+        body["fields"] = exc.fields
+    return JSONResponse(body, status_code=exc.status)
 
 
 async def _keitaro_error(_request: Request, exc: KeitaroError) -> JSONResponse:
-    """Upstream failures are 502; a missing object in Keitaro is a plain 404."""
-    code = 404 if exc.status == 404 else 502
-    return JSONResponse({"detail": f"Keitaro: {exc.message}"}, status_code=code)
+    """Upstream failures are 502; a missing object in Keitaro is a plain 404,
+    field validation errors are 422 with the messages by field."""
+    body: dict[str, object] = {"detail": f"Keitaro: {exc.message}"}
+    if exc.fields:
+        # The alias is made from the name, so its errors belong to the name field
+        body["fields"] = {("name" if k == "alias" else k): v for k, v in exc.fields.items()}
+        return JSONResponse(body, status_code=422)
+    return JSONResponse(body, status_code=404 if exc.status == 404 else 502)
 
 
 app = create_app()

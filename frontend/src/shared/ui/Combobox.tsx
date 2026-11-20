@@ -42,6 +42,8 @@ type ComboboxProps = {
   inline?: boolean;
   /** Tooltip of the field (not of the options). */
   title?: string;
+  /** Highlights the field as having an error. */
+  invalid?: boolean;
   className?: string;
 };
 
@@ -54,6 +56,7 @@ const MIN_ROOM = 160;
 
 const box =
   "flex w-full flex-wrap items-center gap-1 rounded-md bg-white px-1.5 py-1 text-sm ring-1 ring-slate-300 ring-inset focus-within:ring-2 focus-within:ring-indigo-600 dark:bg-slate-950 dark:ring-slate-700 dark:focus-within:ring-indigo-500";
+const invalidBox = box.replace("ring-slate-300", "ring-red-500").replace("dark:ring-slate-700", "dark:ring-red-500");
 const chip =
   "inline-flex max-w-full items-center gap-1 rounded bg-indigo-50 py-0.5 pr-1 pl-1.5 text-xs text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300";
 
@@ -72,6 +75,7 @@ export function Combobox({
   autoFocus,
   inline = false,
   title,
+  invalid = false,
   className = "",
 }: ComboboxProps) {
   const listId = useId();
@@ -231,7 +235,7 @@ export function Combobox({
     <div className={className}>
       <div
         ref={boxRef}
-        className={box}
+        className={invalid ? invalidBox : box}
         title={title}
         onClick={() => inputRef.current?.focus()}
       >

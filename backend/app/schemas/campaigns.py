@@ -44,11 +44,35 @@ class FormDefaults(BaseModel):
     traffic_source_id: int | None
 
 
+class GroupOption(Option):
+    """`name` is shown without the user prefix that Keitaro stores it with."""
+
+    own: bool = Field(description="Created by the current user (`test_{username}_` prefix)")
+
+
+class GroupsInfo(BaseModel):
+    groups: list[GroupOption] = Field(description="Campaign groups open to the current user")
+    prefix: str = Field(description="Prefix Keitaro names of new groups get: `test_{username}_`")
+
+
 class FormOptions(BaseModel):
     domains: list[DomainOption]
     groups: list[Option]
+    group_prefix: str = Field(description="Prefix Keitaro names of new groups get")
     traffic_sources: list[Option]
     defaults: FormDefaults
+
+
+class GroupCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200, description="Without the user prefix")
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("name must not be empty")
+        return value
 
 
 class _CampaignFields(BaseModel):
@@ -88,12 +112,21 @@ class CampaignCreate(_CampaignFields):
     geo: list[str] = Field(
         min_length=1, description="ISO 3166-1 alpha-2 codes; a string `MX,AU` is accepted too"
     )
-    offer_id: int = Field(gt=0)
+    offer_ids: list[int] = Field(
+        min_length=1, description="Offers of the offers flow, shares split evenly"
+    )
     domain_id: int | None = Field(default=None, gt=0, description="Defaults to the server setting")
     group_id: int | None = Field(default=None, gt=0, description="Defaults to the server setting")
     traffic_source_id: int | None = Field(
         default=None, gt=0, description="Defaults to the server setting"
     )
+
+    @field_validator("offer_ids")
+    @classmethod
+    def _check_offers(cls, value: list[int]) -> list[int]:
+        if any(v <= 0 for v in value):
+            raise ValueError("offer ids must be positive")
+        return list(dict.fromkeys(value))  # dedupe, keep order
 
 
 class CampaignUpdate(_CampaignFields):
@@ -183,6 +216,7 @@ class CampaignSummary(BaseModel):
     alias: str
     url: str
     created_at: datetime
+    keitaro_link: str | None = Field(default=None, description="Page in the Keitaro admin")
 
 
 class CampaignDetail(BaseModel):
@@ -190,6 +224,15 @@ class CampaignDetail(BaseModel):
     name: str
     alias: str
     url: str
+    tracking_url: str = Field(
+        description="Campaign URL with the parameters that have a placeholder, as Keitaro shows it"
+    )
+    token: str | None = Field(default=None, description="Campaign token for the Click API")
+    postback_url: str | None = Field(
+        default=None,
+        description="Tracker postback URL on the campaign domain; null without KEITARO_POSTBACK_SECRET",
+    )
+    keitaro_link: str | None = Field(default=None, description="Page in the Keitaro admin")
     state: str
     domain_id: int | None
     group_id: int | None

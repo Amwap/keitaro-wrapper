@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { GeoInput, RefSelect } from '@/entities/campaign'
-import { getFormOptions, updateCampaign, type CampaignDetail, type CampaignUpdate } from '@/shared/api'
-import { countryName, parseGeo, useRequest } from '@/shared/lib'
+import { GeoSelect, RefSelect } from '@/entities/campaign'
+import { fieldErrors, getFormOptions, updateCampaign, type CampaignDetail, type CampaignUpdate } from '@/shared/api'
+import { countryName, useFieldErrors, useRequest } from '@/shared/lib'
 import { Alert, Button, Card, Input, Spinner } from '@/shared/ui'
 
 const initial = (id: number | null) => (id === null ? '' : String(id))
@@ -10,24 +10,24 @@ const sameGeo = (a: string[], b: string[]) => a.join(',') === b.join(',')
 type EditCampaignFormProps = {
   campaign: CampaignDetail
   onSaved: () => void
-  onCancel: () => void
 }
 
 /**
  * The fields of the creation form except the offer: the offers flow has its own editor.
- * Only the changed fields are sent; the alias stays, so only a new domain changes the URL.
+ * Always shown on the campaign page; only the changed fields are sent, Cancel drops the changes.
+ * The alias stays, so only a new domain changes the URL.
  */
-export function EditCampaignForm({ campaign, onSaved, onCancel }: EditCampaignFormProps) {
+export function EditCampaignForm({ campaign, onSaved }: EditCampaignFormProps) {
   const { data: options, error: optionsError } = useRequest('form-options', getFormOptions)
   const [name, setName] = useState(campaign.name)
-  const [geoText, setGeoText] = useState(campaign.geo.join(','))
+  const [geo, setGeo] = useState(campaign.geo)
   const [domain, setDomain] = useState(initial(campaign.domain_id))
   const [group, setGroup] = useState(initial(campaign.group_id))
   const [source, setSource] = useState(initial(campaign.traffic_source_id))
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { errorOf, setErrors, tracked } = useFieldErrors()
 
-  const geo = parseGeo(geoText)
   const invalidGeo = geo.filter((c) => !countryName(c))
   const hasGeoFlow = campaign.geo.length > 0
 
@@ -40,13 +40,33 @@ export function EditCampaignForm({ campaign, onSaved, onCancel }: EditCampaignFo
     if (source !== initial(campaign.traffic_source_id)) data.traffic_source_id = Number(source)
     return data
   }
+  const dirty = Object.keys(changes()).length > 0
+
+  const reset = () => {
+    setName(campaign.name)
+    setGeo(campaign.geo)
+    setDomain(initial(campaign.domain_id))
+    setGroup(initial(campaign.group_id))
+    setSource(initial(campaign.traffic_source_id))
+    setError(null)
+    setErrors({})
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    if (hasGeoFlow && !geo.length) return setError('Enter at least one country code.')
-    if (hasGeoFlow && invalidGeo.length) return setError(`Unknown country codes: ${invalidGeo.join(', ')}.`)
+    const geoError = !hasGeoFlow
+      ? null
+      : !geo.length
+        ? 'Choose at least one country.'
+        : invalidGeo.length
+          ? `Unknown country codes: ${invalidGeo.join(', ')}.`
+          : null
+    if (geoError) {
+      setError(null)
+      return setErrors({ geo: geoError })
+    }
     const data = changes()
-    if (!Object.keys(data).length) return onCancel()
+    if (!Object.keys(data).length) return
     setError(null)
     setPending(true)
     try {
@@ -54,6 +74,8 @@ export function EditCampaignForm({ campaign, onSaved, onCancel }: EditCampaignFo
       onSaved()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+      setErrors(fieldErrors(e))
+    } finally {
       setPending(false)
     }
   }
@@ -72,14 +94,14 @@ export function EditCampaignForm({ campaign, onSaved, onCancel }: EditCampaignFo
           <Input
             label="Name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => tracked('name', setName)(e.target.value)}
+            error={errorOf('name')}
             maxLength={255}
             required
-            autoFocus
           />
 
           {hasGeoFlow ? (
-            <GeoInput value={geoText} onChange={setGeoText} geo={geo} invalid={invalidGeo} />
+            <GeoSelect value={geo} onChange={tracked('geo', setGeo)} error={errorOf('geo')} />
           ) : (
             <p className="text-sm text-slate-500 dark:text-slate-400">
               The campaign has no geo flow, so there are no countries to edit.
@@ -87,13 +109,26 @@ export function EditCampaignForm({ campaign, onSaved, onCancel }: EditCampaignFo
           )}
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <RefSelect title="Domain" options={options.domains} value={domain} onChange={setDomain} />
-            <RefSelect title="Group" options={options.groups} value={group} onChange={setGroup} />
+            <RefSelect
+              title="Domain"
+              options={options.domains}
+              value={domain}
+              onChange={tracked('domain_id', setDomain)}
+              error={errorOf('domain_id')}
+            />
+            <RefSelect
+              title="Group"
+              options={options.groups}
+              value={group}
+              onChange={tracked('group_id', setGroup)}
+              error={errorOf('group_id')}
+            />
             <RefSelect
               title="Traffic source"
               options={options.traffic_sources}
               value={source}
-              onChange={setSource}
+              onChange={tracked('traffic_source_id', setSource)}
+              error={errorOf('traffic_source_id')}
             />
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -103,10 +138,10 @@ export function EditCampaignForm({ campaign, onSaved, onCancel }: EditCampaignFo
           {error && <Alert>{error}</Alert>}
 
           <div className="flex gap-2">
-            <Button type="submit" loading={pending}>
+            <Button type="submit" loading={pending} disabled={!dirty}>
               {pending ? 'Saving…' : 'Save'}
             </Button>
-            <Button type="button" variant="secondary" onClick={onCancel} disabled={pending}>
+            <Button type="button" variant="secondary" onClick={reset} disabled={pending || !dirty}>
               Cancel
             </Button>
           </div>

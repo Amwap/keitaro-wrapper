@@ -1,1 +1,1 @@
-export { GeoInput, RefSelect, fieldLabel } from './ui/CampaignFields'
+export { GeoSelect, RefSelect, fieldLabel } from './ui/CampaignFields'

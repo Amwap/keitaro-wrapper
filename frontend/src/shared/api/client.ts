@@ -3,10 +3,13 @@ import { getAccessToken, refreshAccessToken } from './token'
 
 export class ApiError extends Error {
   readonly status: number
+  /** Messages by request field, for forms to highlight. */
+  readonly fields: Record<string, string>
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, fields: Record<string, string> = {}) {
     super(message)
     this.status = status
+    this.fields = fields
   }
 }
 
@@ -17,26 +20,32 @@ function send(path: string, init: RequestInit) {
   return fetch(`${API_BASE_URL}${path}`, { ...init, headers })
 }
 
-async function errorMessage(res: Response) {
+async function toError(res: Response): Promise<ApiError> {
   const text = await res.text()
   try {
-    const { detail } = JSON.parse(text) as { detail?: unknown }
-    if (typeof detail === 'string') return detail
+    const { detail, fields } = JSON.parse(text) as { detail?: unknown; fields?: Record<string, string> }
+    if (typeof detail === 'string') return new ApiError(res.status, detail, fields)
     // FastAPI validation errors: [{loc, msg, type}, ...]
     if (Array.isArray(detail)) {
-      return detail
+      const byField: Record<string, string> = {}
+      const message = detail
         .map((d: { loc?: unknown[]; msg?: string }) => {
-          const field = d.loc?.filter((p) => p !== 'body').join('.')
+          const path = d.loc?.filter((p) => p !== 'body') ?? []
           const msg = (d.msg ?? '').replace(/^Value error, /, '')
-          return field ? `${field}: ${msg}` : msg
+          if (path.length) byField[String(path[0])] ??= msg
+          return path.length ? `${path.join('.')}: ${msg}` : msg
         })
         .join('; ')
+      return new ApiError(res.status, message, byField)
     }
   } catch {
     // not JSON
   }
-  return text || res.statusText
+  return new ApiError(res.status, text || res.statusText)
 }
+
+/** Field errors of a failed request; empty for other errors. */
+export const fieldErrors = (e: unknown): Record<string, string> => (e instanceof ApiError ? e.fields : {})
 
 /** Fetch wrapper: attaches the access token and retries once after refreshing it on 401. */
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -44,7 +53,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   if (res.status === 401 && getAccessToken() && (await refreshAccessToken())) {
     res = await send(path, init)
   }
-  if (!res.ok) throw new ApiError(res.status, await errorMessage(res))
+  if (!res.ok) throw await toError(res)
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }

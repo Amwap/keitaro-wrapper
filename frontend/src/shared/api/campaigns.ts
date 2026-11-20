@@ -14,6 +14,8 @@ export type OfferOption = Option & {
 export type FormOptions = {
   domains: DomainOption[]
   groups: Option[]
+  /** Prefix Keitaro adds to the name of a new group: `test_{username}_`. */
+  group_prefix: string
   traffic_sources: Option[]
   defaults: { domain_id: number | null; group_id: number | null; traffic_source_id: number | null }
 }
@@ -21,14 +23,15 @@ export type FormOptions = {
 export type CampaignCreate = {
   name: string
   geo: string[]
-  offer_id: number
+  /** Offers of the offers flow; the shares are split evenly. */
+  offer_ids: number[]
   domain_id?: number
   group_id?: number
   traffic_source_id?: number
 }
 
 /** The creation form fields except the offer; a missing field is left as is. */
-export type CampaignUpdate = Partial<Omit<CampaignCreate, 'offer_id'>>
+export type CampaignUpdate = Partial<Omit<CampaignCreate, 'offer_ids'>>
 
 /** Keitaro report intervals the editor's stats are built for. */
 export type Period =
@@ -96,13 +99,29 @@ export type Stream = {
   stats: Stats
 }
 
-export type CampaignSummary = { id: number; name: string; alias: string; url: string; created_at: string }
+export type CampaignSummary = {
+  id: number
+  name: string
+  alias: string
+  url: string
+  created_at: string
+  /** Campaign page in the Keitaro admin; null when the tracker URL is not set. */
+  keitaro_link: string | null
+}
 
 export type CampaignDetail = {
   id: number
   name: string
   alias: string
   url: string
+  /** `url` plus the campaign parameters with their source macros, e.g. `?sub_id_1={zoneid}`. */
+  tracking_url: string
+  /** Campaign token for the Click API. */
+  token: string | null
+  /** Tracker postback URL for the Tracking Script; null until KEITARO_POSTBACK_SECRET is set. */
+  postback_url: string | null
+  /** Campaign page in the Keitaro admin; null when the tracker URL is not set. */
+  keitaro_link: string | null
   state: string
   domain_id: number | null
   group_id: number | null
@@ -135,6 +154,9 @@ export const createCampaign = (data: CampaignCreate) =>
 /** The alias stays, so only a new domain changes the URL. */
 export const updateCampaign = (id: number, data: CampaignUpdate) =>
   apiRequest<CampaignSummary>(`/campaigns/${id}`, json('PATCH', data))
+
+/** Moves the campaign to the Keitaro archive and removes it from the wrapper. */
+export const deleteCampaign = (id: number) => apiRequest<void>(`/campaigns/${id}`, { method: 'DELETE' })
 
 export const getCampaign = (id: number, period: Period, signal?: AbortSignal) =>
   apiRequest<CampaignDetail>(`/campaigns/${id}?${new URLSearchParams({ period })}`, { signal })

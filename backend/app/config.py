@@ -30,7 +30,13 @@ class Settings(BaseSettings):
     keitaro_default_domain_id: int | None = None
     keitaro_default_group_id: int | None = None
     keitaro_default_traffic_source_id: int | None = None
+    # Looked up by name when the id is not set; the domain falls back to the first active one
+    keitaro_default_group_name: str = "FORTESTS"
+    keitaro_default_traffic_source_name: str = "FORTESTS"
     keitaro_geo_redirect_url: str = "https://google.com"
+    # Secret part of the tracker postback URL (`https://domain/{secret}/postback`); the Admin API
+    # does not expose it. Without it the Tracking Script reports clicks but not conversions
+    keitaro_postback_secret: str = ""
 
     @field_validator("keitaro_url")
     @classmethod

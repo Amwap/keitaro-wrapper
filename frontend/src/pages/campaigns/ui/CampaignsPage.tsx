@@ -1,13 +1,26 @@
-import { Link } from 'react-router'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router'
+import { DeleteCampaignButton } from '@/features/delete-campaign'
 import { listCampaigns } from '@/shared/api'
 import { formatDateTime, useRequest } from '@/shared/lib'
-import { Alert, buttonClass, Card, PageHeader, Spinner } from '@/shared/ui'
+import { Alert, buttonClass, Card, CopyButton, ExternalLink, PageHeader, Spinner } from '@/shared/ui'
+import { CreateCampaignModal } from './CreateCampaignModal'
 
 const th = 'px-4 py-3 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400'
 const td = 'px-4 py-3 text-sm text-slate-700 dark:text-slate-300'
 
-export function CampaignsPage() {
-  const { data, error, loading } = useRequest('campaigns', listCampaigns)
+type CampaignsPageProps = {
+  /** `/campaigns/new`: the creation modal is open over the list. */
+  creating?: boolean
+}
+
+export function CampaignsPage({ creating = false }: CampaignsPageProps) {
+  const navigate = useNavigate()
+  const request = useRequest('campaigns', listCampaigns)
+  const { error, loading } = request
+  // Deleted from the list without reloading it
+  const [deleted, setDeleted] = useState<number[]>([])
+  const data = request.data?.filter((c) => !deleted.includes(c.id))
 
   return (
     <>
@@ -19,6 +32,12 @@ export function CampaignsPage() {
             New campaign
           </Link>
         }
+      />
+
+      <CreateCampaignModal
+        open={creating}
+        onClose={() => navigate('/campaigns')}
+        onCreated={(c) => navigate(`/campaigns/${c.id}`)}
       />
 
       {error && <Alert className="mb-4">Could not load campaigns: {error.message}</Alert>}
@@ -44,6 +63,10 @@ export function CampaignsPage() {
                   <th className={th}>Name</th>
                   <th className={th}>URL</th>
                   <th className={th}>Created</th>
+                  <th className={th}>Keitaro</th>
+                  <th className={th}>
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -58,12 +81,25 @@ export function CampaignsPage() {
                         {c.name}
                       </Link>
                     </td>
-                    <td className={`${td} max-w-xs truncate`}>
-                      <a href={c.url} target="_blank" rel="noreferrer" className="hover:underline" title={c.url}>
-                        {c.url}
-                      </a>
+                    <td className={`${td} max-w-xs`}>
+                      <div className="flex items-center gap-1">
+                        <a href={c.url} target="_blank" rel="noreferrer" className="min-w-0 truncate hover:underline" title={c.url}>
+                          {c.url}
+                        </a>
+                        <CopyButton value={c.url} label="URL" />
+                      </div>
                     </td>
                     <td className={`${td} whitespace-nowrap`}>{formatDateTime(c.created_at)}</td>
+                    <td className={td}>
+                      {c.keitaro_link && <ExternalLink href={c.keitaro_link}>Open</ExternalLink>}
+                    </td>
+                    <td className={`${td} text-right`}>
+                      <DeleteCampaignButton
+                        campaign={c}
+                        compact
+                        onDeleted={() => setDeleted((ids) => [...ids, c.id])}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
